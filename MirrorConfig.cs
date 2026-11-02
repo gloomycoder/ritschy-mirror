@@ -61,8 +61,8 @@ public sealed class MirrorConfig
     // Group gains on top of each source's own gain: effective = group dB + device dB.
     [JsonPropertyName("audio_render_gain_db")]  public float AudioRenderGainDb { get; set; } = 0f;
     [JsonPropertyName("audio_capture_gain_db")] public float AudioCaptureGainDb { get; set; } = 0f;
-    // Output-device sources follow that device's Windows volume + mute (loopback is captured before
-    // both). Off = the mirror always gets the full signal, e.g. for recording.
+    // Output-device sources follow that device's Windows volume + mute where the loopback signal
+    // doesn't already contain them (see LoopbackVolume). Off = the mirror gets the loopback signal as is.
     [JsonPropertyName("audio_follow_volume")]  public bool AudioFollowVolume { get; set; } = true;
     // Fixed output endpoint for the mix ("" = automatic: the target monitor's HDMI/DP audio by EDID name).
     [JsonPropertyName("audio_output_id")]   public string AudioOutputId { get; set; } = "";

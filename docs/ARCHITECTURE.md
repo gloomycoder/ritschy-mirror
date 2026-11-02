@@ -137,12 +137,19 @@ format. The rates are also in `GET /status` (`capture_fps`, `output_fps`).
   (errors logged, never thrown: it runs inside the worker's catch/finally). Any other exception in
   a worker iteration is handled like a failed start — pipeline dropped, retry on the back-off
   (at least 1 s, so a failing wait can't spin) — and the worker stays alive until `Dispose()`.
-- **Volume follow** (`audio_follow_volume`, default on) — loopback delivers an output device's mix
-  before its endpoint volume and mute (measured: the mirror kept the same level at 14 % and muted).
-  An output-device channel therefore multiplies its gain by the device's level in dB relative to
-  its maximum (never a boost) and by 0 when muted or at 0 %, updated from
-  `AudioEndpointVolume.OnVolumeNotification`. Input devices are left alone — Windows applies a
-  mic's input level and mute before capture clients get the signal (not measured here: no mic).
+- **Volume follow** (`audio_follow_volume`, default on) — what loopback contains depends on where
+  the device applies its volume (`QueryHardwareSupport`). Measured with a 0.5 test tone:
+
+  | Device | Volume | Mute | Loopback at 50 % / 20 % / muted |
+  |---|---|---|---|
+  | ZEUSLAP-HDMI (NVIDIA HDMI) | software | hardware | 0.149 / 0.030 (= post-volume) / 0.5 |
+  | Realtek USB headphone | hardware | hardware | unchanged (pre-volume) / unchanged |
+
+  So `LoopbackVolume.Factor` applies a hardware volume (dB relative to the maximum, never a boost,
+  0 at 0 %), leaves a software volume alone (already in the signal) and always applies mute
+  (harmless if already silent). Updated from `AudioEndpointVolume.OnVolumeNotification`. Not
+  documented by Microsoft either way; software mute and input devices are not measured here (input
+  devices are left as Windows delivers them).
 - **Output** — `audio_output_id` if set, otherwise the target monitor's endpoint by EDID name.
 - **Retry** — a (re)start that throws (device not ready, exclusive use by another app) is retried
   by the worker on a 1 s → 30 s back-off; a success resets it. Gain = group dB (`audio_render_gain_db` / `audio_capture_gain_db`) + source dB,

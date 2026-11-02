@@ -83,7 +83,7 @@
   "audio.out.auto": "Automatic — output monitor ({0})",
   "audio.out.note": "Automatic uses the output monitor’s HDMI/DP audio. Pick a device if it isn’t found (different name, identical monitors). Takes effect after \"↻ Refresh devices\" for the source list.",
   "settings.audio_follow_volume": "Follow the volume and mute of output devices",
-  "settings.audio_follow_volume.note": "On: turning an output device down or muting it in Windows changes the mirror the same way, as you hear it. Off: the mirror always gets the full signal (e.g. for recording). Microphones always arrive at their Windows input level.",
+  "settings.audio_follow_volume.note": "On: turning an output device down or muting it in Windows changes the mirror the same way, as you hear it. Off: the mirror gets the device’s sound as Windows captures it (for many devices the volume is already in it, but not the mute). Microphones are always left as Windows delivers them.",
   "audio.src.is_default": "(default) {0}",
   "audio.status.retrying": "not available — {0} (retrying in {1} s)",
   "audio.status.output_not_found": "disabled — output device \"{0}\" is not connected",

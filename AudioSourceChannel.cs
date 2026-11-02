@@ -14,11 +14,10 @@ namespace RitschyMirror;
 /// <see cref="DriftCompensator"/> holds it at ~40 ms by resampling within ±0.5 %. Only if the
 /// queue still runs away (playback stalled) is it cut back on the capture thread.
 ///
-/// Loopback captures an output device's mix BEFORE its Windows volume and mute, so turning the
-/// speakers down would not change the mirror. With "follow volume" on, an output-device channel
-/// applies that device's attenuation (dB relative to its maximum) and mute on top of the user gain,
-/// updated live from the endpoint's volume notifications. Input devices need nothing: Windows
-/// applies a microphone's input level and mute before any app receives the signal.
+/// With "follow volume" on, an output-device channel applies whatever part of that device's Windows
+/// volume and mute its loopback signal does not already contain (see <see cref="LoopbackVolume"/>:
+/// a hardware volume and the mute — a software volume is already in the signal), updated live from
+/// the endpoint's volume notifications. Input devices are left as Windows delivers them.
 /// </summary>
 internal sealed class AudioSourceChannel : IDisposable
 {
@@ -36,6 +35,7 @@ internal sealed class AudioSourceChannel : IDisposable
     private float _userGain;                 // group + device gain (linear)
     private volatile bool _follow;
     private volatile float _followFactor = 1f;   // device volume/mute as a linear factor
+    private bool _hardwareVolume;                // else the volume is already in the loopback signal
 
     /// <summary>Device-level identity ("render:{endpoint id}") — used to drop duplicates.</summary>
     public string DeviceKey { get; }
@@ -83,6 +83,7 @@ internal sealed class AudioSourceChannel : IDisposable
             if (isRender)
             {
                 _endpointVolume = device.AudioEndpointVolume;   // owned (and disposed) by the device
+                _hardwareVolume = LoopbackVolume.HasHardwareVolume((uint)_endpointVolume.HardwareSupport);
                 _endpointVolume.OnVolumeNotification += OnDeviceVolume;
                 _followFactor = ReadFollowFactor();
             }
@@ -112,14 +113,16 @@ internal sealed class AudioSourceChannel : IDisposable
         ApplyGain();
     }
 
-    /// <summary>"follows volume -12.3 dB" / "follows volume: muted" for logs; "" when not following.</summary>
+    /// <summary>"follows volume -12.3 dB" / "… muted" / software-volume note for logs; "" when not following.</summary>
     public string FollowText
     {
         get
         {
             if (!_follow) return "";
             float f = _followFactor;
-            return f <= 0 ? "follows volume: muted" : $"follows volume {20 * Math.Log10(f):0.0} dB";
+            if (f <= 0) return "follows volume: muted";
+            return _hardwareVolume ? $"follows volume {20 * Math.Log10(f):0.0} dB"
+                                   : "follows mute (software volume is already in the signal)";
         }
     }
 
@@ -130,23 +133,19 @@ internal sealed class AudioSourceChannel : IDisposable
     {
         try
         {
-            _followFactor = data.Muted || data.MasterVolume <= 0 ? 0f : ReadFollowFactor();
+            _followFactor = ReadFollowFactor();
             ApplyGain();
         }
         catch (Exception) { /* device going away — the pipeline is about to be rebuilt */ }
     }
 
-    /// <summary>
-    /// Attenuation the device applies, as a linear factor: its level in dB relative to its maximum
-    /// (100 % = 1.0, so a device with a +dB range never boosts the mirror), 0 when muted or at 0 %.
-    /// dB rather than the slider scalar, so the mirror changes by what you actually hear.
-    /// </summary>
+    /// <summary>The device's current volume/mute as the factor the loopback signal still needs
+    /// (dB rather than the slider scalar, so the mirror changes by what you actually hear).</summary>
     private float ReadFollowFactor()
     {
         var v = _endpointVolume!;
-        if (v.Mute || v.MasterVolumeLevelScalar <= 0) return 0f;
-        double db = v.MasterVolumeLevel - v.VolumeRange.MaxDecibels;
-        return (float)Math.Pow(10, Math.Min(0, db) / 20);
+        return LoopbackVolume.Factor((uint)v.HardwareSupport, v.Mute, v.MasterVolumeLevelScalar,
+                                     v.MasterVolumeLevel, v.VolumeRange.MaxDecibels);
     }
 
     public void Start() => _recorder.StartRecording();

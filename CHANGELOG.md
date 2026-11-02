@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed: volume follow applied the volume twice on some devices.** Measured: loopback already
+  contains a volume that Windows applies in software (e.g. HDMI audio, many speakers) and lacks
+  only a volume or mute done in hardware (e.g. this USB headset). Following is now per device:
+  hardware volume → followed in dB, software volume → left as is (already in the signal), mute →
+  always followed. The source log says which applies.
+- Corrected: microphones are left as Windows delivers them; v1.4.9's note that Windows always
+  applies their input level and mute first was not verified (no mic to measure here).
+
 ## v1.4.9 — audio mirror follows output volume and mute, self-recovering audio worker
 
 - **The mirror follows the Windows volume and mute of output devices** (new setting, on by
