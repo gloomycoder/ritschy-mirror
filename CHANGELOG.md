@@ -1,12 +1,13 @@
 # Changelog
 
-## Unreleased
+## v1.4.12 — mirroring never gives up: survives UAC, waits for missing monitors
 
 - **Mirroring never gives up.** It used to stop after 8 failed reinits; now it keeps retrying
   (fast at first, then every 10 s, with a quiet log) until it works or you stop it.
 - **DXGI survives UAC prompts and the lock screen.** These switch to the secure desktop, which
   DXGI can't capture — after ~25 s the mirror used to stop. It now keeps the last frame on screen,
-  re-tries once a second and continues within a second of the desktop returning.
+  re-tries once a second and continues within a second of the desktop returning. (Tested: a UAC
+  prompt left open for 39 s — capture resumed in the same second it closed, no reinit.)
 - **Waits for a missing monitor or window** instead of stopping: "not connected" / "window not
   found" are re-checked every second, and mirroring continues as soon as that exact monitor or
   window is back (status: "waiting"). Starting while it is missing starts anyway, with a note.

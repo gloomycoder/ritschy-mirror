@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.12 ✓
+
+- **Always-on resilience** — DXGI waits out UAC / lock screen, missing monitors and windows are
+  waited for, reinits never give up; single instance with an "already running" notice.
+
 ## Done in v1.4.11 ✓
 
 - **Live device list in settings** — the audio section follows default-device and plug changes without
