@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.8 ✓
+
+- **Stability** — no overlapping render threads after a slow stop, crash-safe audio cleanup, WGC
+  stop race closed; a once-a-minute soak log (fps, memory, audio drift) for long runs.
+
 ## Done in v1.4.7 ✓
 
 - **Audio tail fix** — the end of a short sound is played out completely; no silence padding mid-sound.

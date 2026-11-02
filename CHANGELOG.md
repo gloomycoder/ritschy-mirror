@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.8 — stability: no overlapping render threads, crash-safe audio cleanup, soak log
 
 - **Fixed: two render threads could run at once.** If a stop took longer than 4 s, the engine
   forgot the old thread and a new start shared its stop flag, so the old session could resume next
