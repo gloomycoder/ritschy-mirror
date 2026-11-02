@@ -20,6 +20,7 @@ public sealed class SettingsForm : Form
     private const int LX = 16, CX = 230, VX = 500, ROW = 32;
     private const int NoteWidth = 570;            // notes wrap at this width instead of widening the panel
     private const int StatusRefreshMs = 1000;
+    private const int StatusLines = 3;            // audio status: room for long device names
 
     private readonly MirrorEngine _engine;
     private readonly string _appSettingsPath;
@@ -29,6 +30,7 @@ public sealed class SettingsForm : Form
     private bool _loading;
 
     private readonly Panel _panel;
+    private readonly float _scale;   // device pixels per layout pixel (1.5 at 150 % display scaling)
     private int _y = 12;
     private ComboBox _srcCombo = null!, _dstCombo = null!;
     private ComboBox _modeCombo = null!, _winCombo = null!;
@@ -47,15 +49,19 @@ public sealed class SettingsForm : Form
         _onLanguageChanged = onLanguageChanged;
         _cfg = MirrorConfig.Load(engine.ConfigPath);
 
+        // All coordinates below are 96-dpi (100 %) layout pixels. WinForms scales locations and sizes
+        // to the monitor's DPI on ResumeLayout (and again on WM_DPICHANGED); without this only the
+        // fonts grew at 125/150 %, so labels overlapped the inputs and rows overlapped each other.
+        SuspendLayout();
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        _scale = DeviceDpi / 96f;
+
         Text = L.T("settings.title", AppInfo.Version);
         Icon = AppIcon.Load(small: false);
         ClientSize = new Size(620, 780);
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(520, 420);
-        // On small/short screens never taller than the working area — otherwise the
-        // bottom button bar (Close / Check for updates) slides out of the visible window.
-        var wa = Screen.PrimaryScreen?.WorkingArea;
-        if (wa is { } a && Height > a.Height - 16) Height = a.Height - 16;
 
         _panel = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(8) };
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 48, BackColor = SystemColors.ControlLight };
@@ -83,6 +89,14 @@ public sealed class SettingsForm : Form
         update.Click += (_, _) => CheckForUpdates(update);
         bottom.Controls.AddRange(new Control[] { start, restart, close, update });
 
+        ResumeLayout(false);
+        PerformLayout();
+        // On small/short screens never taller than the working area — otherwise the bottom
+        // button bar (Close / Check for updates) slides out of the visible window. After scaling,
+        // so the check uses the real (device-pixel) height.
+        var wa = Screen.PrimaryScreen?.WorkingArea;
+        if (wa is { } a && Height > a.Height - 16) Height = a.Height - 16;
+
         // Audio-mirror status follows device switches live → poll the engine while the window is open.
         _statusTimer = new System.Windows.Forms.Timer { Interval = StatusRefreshMs };
         _statusTimer.Tick += (_, _) => RefreshAudioStatus();
@@ -108,6 +122,8 @@ public sealed class SettingsForm : Form
     private void SaveApp() { if (_loading) return; _app.Save(_appSettingsPath); }
 
     // ── Layout helpers (manual, y cursor) ────────────────────────────────
+    private int ToLayout(int devicePx) => (int)Math.Ceiling(devicePx / _scale);
+
     private void Header(string text)
     {
         _y += 8;
@@ -124,7 +140,8 @@ public sealed class SettingsForm : Form
         var lbl = new Label { Text = text, Location = new Point(LX, _y), AutoSize = true, ForeColor = Color.DimGray,
                               MaximumSize = new Size(NoteWidth, 0) };
         _panel.Controls.Add(lbl);
-        _y += lbl.GetPreferredSize(new Size(NoteWidth, 0)).Height + 7;
+        // Measured in device pixels (the font is already DPI-sized) → back to layout pixels.
+        _y += ToLayout(lbl.GetPreferredSize(new Size((int)(NoteWidth * _scale), 0)).Height) + 7;
     }
 
     private ComboBox ComboRow(string label, string[] items, string current, Action<string> set)
@@ -310,9 +327,13 @@ public sealed class SettingsForm : Form
         Header(L.T("section.audio"));
         CheckRow(L.T("settings.audio_mirror"), _cfg.AudioMirror, v => { _cfg.AudioMirror = v; RefreshAudioStatus(); });
         Note(L.T("settings.audio_mirror.note"));
-        _audioStatus = new Label { Location = new Point(LX, _y), AutoSize = false, Size = new Size(NoteWidth, 36) };
+        // Device names make this line long and it changes live → reserve room for a few wrapped
+        // lines, measured in the actual font (a fixed pixel height clips at high display scaling).
+        int statusHeight = ToLayout(TextRenderer.MeasureText("Ag", Font).Height) * StatusLines;
+        _audioStatus = new Label { Location = new Point(LX, _y), AutoSize = false, AutoEllipsis = true,
+                                   Size = new Size(NoteWidth, statusHeight) };
         _panel.Controls.Add(_audioStatus);
-        _y += 40;
+        _y += statusHeight + 6;
         RefreshAudioStatus();
     }
 
