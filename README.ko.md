@@ -106,18 +106,20 @@
 
 ## 다운로드 및 설치
 
-1. [**Releases**](https://github.com/RitschyRigz/ritschy-mirror/releases) 페이지에서
-   **`RitschyMirror-Setup-1.4.0.exe`**를 내려받습니다.
-2. 실행하면 **사용자 단위로 설치**됩니다 — 관리자 권한이나 UAC 확인창이 필요 없으며(VS Code 사용자
-   설치 프로그램과 같은 방식), `…\AppData\Local\Programs\RitschyMirror`에 설치됩니다.
-3. 옵션(바탕화면 아이콘, 자동 시작)을 고르고 마치면 앱이 트레이에서 시작됩니다.
+1. [**Releases**](https://github.com/gloomycoder/ritschy-mirror/releases) 페이지에서
+   **`RitschyMirror-1.4.0-portable.zip`**을 내려받습니다.
+2. 쓰기 권한이 있는 아무 폴더에나 압축을 풉니다(예: `D:\Tools\RitschyMirror`). 안에는 .NET 설치가
+   필요 없는 단일 실행 파일 `RitschyMirror.exe`와 기본 설정이 든 `config\` 폴더가 있습니다.
+3. `RitschyMirror.exe`를 실행하면 트레이에서 시작됩니다. 관리자 권한이나 UAC 확인창은 필요 없고,
+   처음 실행할 때 옆에 `log\` 폴더가 생깁니다. 로그인 시 자동 실행은 **설정 → 연결 / 자동 시작**에서
+   켤 수 있습니다.
 
-> **Windows SmartScreen 안내:** 설치 프로그램에 아직 코드 서명이 되어 있지 않아서 Windows가
+> **Windows SmartScreen 안내:** exe에 아직 코드 서명이 되어 있지 않아서 Windows가
 > *"Windows에서 PC를 보호했습니다"* 라고 표시할 수 있습니다. **추가 정보 → 실행**을 누르세요.
-> (코드 서명은 로드맵에 있습니다.)
 
-나중에 제거하려면 **설정 → 앱 → 설치된 앱 → RitschyMirror → 제거**를 누르세요. 설정 파일까지
-포함해 완전히 삭제됩니다.
+제거하려면 트레이에서 종료하고, 로그인 자동 실행을 켰다면 먼저 끈 다음 폴더를 지우면 됩니다.
+
+> Inno Setup 설치 프로그램을 직접 빌드하는 방법은 *소스에서 빌드*를 참고하세요.
 
 ---
 

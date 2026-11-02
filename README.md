@@ -108,18 +108,20 @@ sends the result to the display your capture card is plugged into.
 
 ## Download & Install
 
-1. Go to the [**Releases**](https://github.com/RitschyRigz/ritschy-mirror/releases) page and
-   download **`RitschyMirror-Setup-1.4.0.exe`**.
-2. Run it. It installs **per-user — no admin / UAC prompt** (like the VS Code user installer),
-   into `…\AppData\Local\Programs\RitschyMirror`.
-3. Pick your options (desktop icon, auto-start), finish, and the app starts in your tray.
+1. Go to the [**Releases**](https://github.com/gloomycoder/ritschy-mirror/releases) page and
+   download **`RitschyMirror-1.4.0-portable.zip`**.
+2. Extract it anywhere you can write to (e.g. `D:\Tools\RitschyMirror`). It contains a single,
+   self-contained `RitschyMirror.exe` (no .NET install needed) and `config\` with the defaults.
+3. Run `RitschyMirror.exe` — the app starts in your tray; no admin / UAC prompt. `log\` is created
+   next to it on first start. Use **Settings → Connection / autostart** to start it at login.
 
-> **Windows SmartScreen note:** the installer isn't code-signed yet, so Windows may show
-> *"Windows protected your PC"*. Click **More info → Run anyway**. (Code signing is on the
-> roadmap.)
+> **Windows SmartScreen note:** the exe isn't code-signed yet, so Windows may show
+> *"Windows protected your PC"*. Click **More info → Run anyway**.
 
-To remove it later: **Settings → Apps → Installed apps → RitschyMirror → Uninstall.** It
-removes itself completely, including its config.
+To remove it: quit it from the tray, untick login autostart first if you enabled it, then delete
+the folder.
+
+> Building the Inno Setup installer yourself is still supported — see *Build from source*.
 
 ---
 
