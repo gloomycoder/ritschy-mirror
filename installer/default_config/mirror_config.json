@@ -27,5 +27,9 @@
   "windowed": true,
   "window_width": 1280,
   "window_height": 720,
-  "vsync": true
+  "vsync": true,
+  "target_fps": 0,
+  "fps_overlay": false,
+  "fps_overlay_position": "top_left",
+  "audio_mirror": false
 }

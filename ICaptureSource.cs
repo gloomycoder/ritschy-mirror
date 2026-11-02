@@ -43,7 +43,8 @@ public interface ICaptureSource : IDisposable
     int CursorH { get; }
     ID3D11ShaderResourceView? CursorSrv { get; }
 
-    /// <summary>Fetch a new frame + copy it into the SRV. true = new frame, false = timeout/none.
+    /// <summary>Fetch the NEWEST frame + copy it into the SRV, waiting up to <paramref name="timeoutMs"/>
+    /// for one (0 = just poll). true = new frame, false = timeout/none.
     /// Throws on a real loss (e.g. ACCESS_LOST / source gone) → the render loop then decides on
     /// recovery (<see cref="Recover"/>) or a full reinit.</summary>
     bool TryAcquire(ID3D11DeviceContext ctx, int timeoutMs = 16);

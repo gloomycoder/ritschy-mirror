@@ -50,40 +50,40 @@ public static class WindowEnum
     /// <summary>
     /// Resolve saved (exe, title) against the currently open windows.
     /// Order: same exe + exact title → same exe + title prefix → sole exe match
-    /// → exact title (no exe info) → nothing. Returns (hwnd, "") on a match, otherwise (Zero, plain-text error).
+    /// → exact title (no exe info) → nothing. Returns (hwnd, null) on a match, otherwise (Zero, user-facing error).
     /// </summary>
-    public static (IntPtr hwnd, string error) Resolve(string exe, string title)
+    public static (IntPtr hwnd, LocalizedText? error) Resolve(string exe, string title)
     {
         var wins = List();
-        if (wins.Count == 0) return (IntPtr.Zero, "Keine aufnehmbaren Fenster gefunden");
+        if (wins.Count == 0) return (IntPtr.Zero, new LocalizedText("error.no_capturable_windows"));
 
         bool hasExe = !string.IsNullOrWhiteSpace(exe);
         bool hasTitle = !string.IsNullOrWhiteSpace(title);
         if (!hasExe && !hasTitle)
-            return (IntPtr.Zero, "Kein Fenster ausgewählt");
+            return (IntPtr.Zero, new LocalizedText("error.no_window_selected"));
 
         if (hasExe)
         {
             var sameExe = wins.Where(w => string.Equals(w.Exe, exe, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (sameExe.Count == 1) return (sameExe[0].Hwnd, "");
+            if (sameExe.Count == 1) return (sameExe[0].Hwnd, null);
             if (sameExe.Count > 1)
             {
                 var exact = sameExe.FirstOrDefault(w => string.Equals(w.Title, title, StringComparison.OrdinalIgnoreCase));
-                if (exact != null) return (exact.Hwnd, "");
+                if (exact != null) return (exact.Hwnd, null);
                 var prefix = sameExe.FirstOrDefault(w =>
                     hasTitle && w.Title.StartsWith(title, StringComparison.OrdinalIgnoreCase));
-                if (prefix != null) return (prefix.Hwnd, "");
-                return (sameExe[0].Hwnd, ""); // several with the same exe, no title match → first
+                if (prefix != null) return (prefix.Hwnd, null);
+                return (sameExe[0].Hwnd, null); // several with the same exe, no title match → first
             }
         }
         if (hasTitle)
         {
             var byTitle = wins.FirstOrDefault(w => string.Equals(w.Title, title, StringComparison.OrdinalIgnoreCase));
-            if (byTitle != null) return (byTitle.Hwnd, "");
+            if (byTitle != null) return (byTitle.Hwnd, null);
         }
 
         string what = hasTitle ? title : exe;
-        return (IntPtr.Zero, $"Fenster '{what}' nicht gefunden (läuft die Anwendung?)");
+        return (IntPtr.Zero, new LocalizedText("error.window_not_found", what));
     }
 
     // ── Filter: is this a "real", capturable app window? ───────────────────

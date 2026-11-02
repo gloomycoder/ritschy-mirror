@@ -1,5 +1,14 @@
 # Roadmap
 
+## Done in v1.4.0 ✓
+
+- **Target FPS** with high-resolution pacing and newest-frame-first capture; render/present skipped
+  while nothing changes.
+- **Audio mirroring** of the default playback device to the target monitor's HDMI/DP audio, with
+  live pause/resume on default-device changes.
+- **Capture / output FPS readout** (corner selectable) and FPS/audio status in the HTTP API.
+- **Language packs** (en / ko / de, user-extendable) for settings, tray, dock and errors.
+
 ## Done in v1.3.2 ✓
 
 - **Correct colour maths for an SDR source.** DXGI Desktop Duplication and Windows.Graphics.Capture

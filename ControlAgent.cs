@@ -14,7 +14,9 @@ namespace RitschyMirror;
 ///
 /// Routes:
 ///   GET  /health    → {"ok":true}
-///   GET  /status    → {"running":bool,"state":"running|stopped","config":{...}}
+///   GET  /status    → {"running":bool,"state":"running|stopped","config":{...},
+///                        "error","capture_fps","output_fps","audio":{"state","message"}}
+///   GET  /lang      → {"lang":"ko","strings":{...}}  (active language pack, for the dock)
 ///   GET  /config    → mirror_config.json
 ///   POST /config    → whitelist merge (body = JSON patch), then status
 ///   POST /start | /stop | /restart → control the engine, then status
@@ -102,6 +104,15 @@ public sealed class ControlAgent
                 WriteHtml(ctx, DockHtml());
                 break;
 
+            case "/lang":
+            {
+                // Active language pack for the OBS dock (same keys as the desktop UI).
+                var pack = new JsonObject();
+                foreach (var kv in L.Snapshot()) pack[kv.Key] = kv.Value;
+                WriteJson(ctx, 200, new JsonObject { ["lang"] = L.Current, ["strings"] = pack });
+                break;
+            }
+
             case "/health":
                 WriteJson(ctx, 200, new JsonObject { ["ok"] = true, ["running"] = _engine.IsRunning });
                 break;
@@ -170,12 +181,23 @@ public sealed class ControlAgent
     private JsonObject StatusObject()
     {
         bool running = _engine.IsRunning;
+        var config = LoadConfigNode();
+        bool audioWanted = config is JsonObject o && o["audio_mirror"] is JsonValue v
+                           && v.TryGetValue(out bool b) && b;
         return new JsonObject
         {
             ["running"] = running,
             ["state"] = running ? "running" : "stopped",
-            ["config"] = LoadConfigNode(),
+            ["lang"] = L.Current,
+            ["config"] = config,
             ["error"] = string.IsNullOrEmpty(_engine.LastError) ? null : _engine.LastError,
+            ["capture_fps"] = Math.Round(_engine.CaptureFps, 1),
+            ["output_fps"] = Math.Round(_engine.OutputFps, 1),
+            ["audio"] = new JsonObject
+            {
+                ["state"] = _engine.Audio.State.ToString().ToLowerInvariant(),
+                ["message"] = _engine.AudioStatusText(audioWanted),
+            },
         };
     }
 
@@ -202,7 +224,7 @@ public sealed class ControlAgent
             if (s != null) { using var r = new StreamReader(s); _dock = r.ReadToEnd(); }
         }
         catch { }
-        return _dock ??= "<!doctype html><meta charset=utf-8><h1>RitschyMirror</h1><p>dock.html fehlt.</p>";
+        return _dock ?? $"<!doctype html><meta charset=utf-8><h1>RitschyMirror</h1><p>{WebUtility.HtmlEncode(L.T("agent.dock_missing"))}</p>";
     }
 
     private static void WriteHtml(HttpListenerContext ctx, string html)

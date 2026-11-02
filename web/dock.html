@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -39,80 +39,100 @@
   .err { color:var(--off); font-size:12px; }
   footer { text-align:center; color:var(--mut); font-size:11px; margin-top:4px; }
   footer a { color:var(--accent); text-decoration:none; }
+  .stats { color:var(--mut); font-size:12px; font-variant-numeric:tabular-nums; margin-top:6px; }
+  .stats span + span::before { content:" · "; }
+  input:disabled { opacity:.45; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>RitschyMirror</h1>
-    <span class="pill"><span id="dot" class="dot"></span><span id="state">verbinde…</span></span>
+    <span class="pill"><span id="dot" class="dot"></span><span id="state" data-i18n="dock.connecting">connecting…</span></span>
   </header>
 
   <div class="card">
     <button id="toggle" class="toggle stopped" disabled>—</button>
     <div id="conn" class="hint"></div>
+    <div class="stats"><span id="fps_readout"></span><span id="audio_readout"></span></div>
   </div>
 
   <div class="card">
-    <h2>Quelle / Ziel <small>(Wechsel = Neustart)</small></h2>
-    <div class="row"><label>Modus</label>
+    <h2><span data-i18n="dock.card.source">Source / target</span> <small data-i18n="dock.restart_hint">(change = restart)</small></h2>
+    <div class="row"><label data-i18n="dock.mode">Mode</label>
       <select id="capture_mode" data-kind="struct">
-        <option value="monitor">monitor — ganzer Bildschirm</option>
-        <option value="window">window — ein Fenster / Vollbild-App</option>
+        <option value="monitor" data-i18n="dock.mode.monitor">monitor — whole screen</option>
+        <option value="window" data-i18n="dock.mode.window">window — a window / fullscreen app</option>
       </select></div>
-    <div class="row"><label>Fenster</label><select id="window_pick"></select>
-      <button class="iconbtn" id="refresh_win" title="Fensterliste aktualisieren">↻</button></div>
-    <div class="row"><label>Quell-Mon.</label><select id="src"></select></div>
-    <div class="row"><label>Ziel-Mon.</label><select id="dst"></select>
-      <button class="iconbtn" id="refresh" title="Monitore aktualisieren">↻</button></div>
-    <div class="hint">„window" spiegelt nur das Fenster — beim Raustaben bleibt der Desktop unsichtbar.</div>
+    <div class="row"><label data-i18n="dock.window">Window</label><select id="window_pick"></select>
+      <button class="iconbtn" id="refresh_win" data-i18n-title="dock.refresh_windows" title="Refresh window list">↻</button></div>
+    <div class="row"><label data-i18n="dock.src_mon">Source mon.</label><select id="src"></select></div>
+    <div class="row"><label data-i18n="dock.dst_mon">Target mon.</label><select id="dst"></select>
+      <button class="iconbtn" id="refresh" data-i18n-title="dock.refresh_monitors" title="Refresh monitors">↻</button></div>
+    <div class="hint" data-i18n="dock.window_hint">"window" mirrors only the window — the desktop stays hidden when you alt-tab.</div>
   </div>
 
   <div class="card">
-    <h2>Layout &amp; Ausgabe <small>(Ausgabe/Bit-Tiefe/Fenster = Neustart)</small></h2>
-    <div class="row"><label>Layout</label>
+    <h2><span data-i18n="dock.card.layout">Layout &amp; output</span> <small data-i18n="dock.layout_hint">(output/bit depth/window = restart)</small></h2>
+    <div class="row"><label data-i18n="dock.layout">Layout</label>
       <select id="layout_mode" data-kind="live">
         <option value="fit">fit (1:1)</option><option value="stretch">stretch</option>
         <option value="top_strip">top_strip</option><option value="crop_region">crop_region</option>
       </select></div>
-    <div class="row"><label>Ausgabe</label>
+    <div class="row"><label data-i18n="dock.output">Output</label>
       <select id="output_mode" data-kind="struct">
         <option value="windowed">windowed</option><option value="borderless">borderless</option>
         <option value="fullscreen_block">fullscreen_block</option><option value="exclusive">exclusive</option>
       </select></div>
-    <div class="row"><label>Bit-Tiefe</label>
+    <div class="row"><label data-i18n="settings.bit_depth">Bit depth</label>
       <select id="output_bit_depth" data-kind="struct"><option value="8">8</option><option value="10">10</option></select></div>
-    <div class="row"><label>Fenster B×H</label>
+    <div class="row"><label data-i18n="dock.window_size">Window W×H</label>
       <input type="number" id="window_width" data-kind="struct" min="320" max="7680" step="16" style="flex:0 0 86px">
       <input type="number" id="window_height" data-kind="struct" min="240" max="4320" step="16" style="flex:0 0 86px"></div>
   </div>
 
   <div class="card">
-    <h2>Bild / Tonemap <small>(live)</small></h2>
-    <label class="chk"><input type="checkbox" id="tonemap_enabled"><span>Tonemap aktiv (HDR→SDR)</span></label>
-    <div class="row"><label>Operator</label>
+    <h2><span data-i18n="dock.card.image">Image / tonemap</span> <small data-i18n="dock.live">(live)</small></h2>
+    <label class="chk"><input type="checkbox" id="tonemap_enabled"><span data-i18n="settings.tonemap">Tonemap enabled (HDR→SDR)</span></label>
+    <div class="row"><label data-i18n="settings.operator">Operator</label>
       <select id="operator">
         <option value="bt2390">bt2390</option><option value="reinhard">reinhard</option>
         <option value="hable">hable</option><option value="aces">aces</option>
       </select></div>
-    <div class="row"><label>Sättigung</label><input type="range" id="saturation" min="0" max="2" step="0.01"><span class="val" id="saturation_v"></span></div>
-    <div class="row"><label>Kontrast</label><input type="range" id="contrast" min="0" max="2" step="0.01"><span class="val" id="contrast_v"></span></div>
-    <div class="row"><label>Gamma</label><input type="range" id="gamma" min="0.3" max="3" step="0.01"><span class="val" id="gamma_v"></span></div>
-    <div class="row"><label>Belichtung</label><input type="range" id="exposure" min="-3" max="3" step="0.01"><span class="val" id="exposure_v"></span></div>
-    <div class="row"><label>Weißpunkt</label><input type="range" id="target_paperwhite" min="80" max="400" step="1"><span class="val" id="target_paperwhite_v"></span></div>
-    <div class="row"><label>Quell-Spitze</label><input type="range" id="source_peak_nits" min="200" max="4000" step="10"><span class="val" id="source_peak_nits_v"></span></div>
-    <div class="row"><label>Vert.-Offset</label><input type="number" id="content_offset_y" min="-2160" max="2160" step="2" style="flex:0 0 86px"><span class="hint" style="margin:0">px</span></div>
-    <label class="chk"><input type="checkbox" id="show_cursor"><span>Mauszeiger anzeigen</span></label>
-    <label class="chk"><input type="checkbox" id="vsync"><span>VSync</span></label>
-    <label class="chk"><input type="checkbox" id="keep_awake"><span>Schlafmodus / Monitor-Abschaltung verhindern</span></label>
+    <div class="row"><label data-i18n="settings.saturation">Saturation</label><input type="range" id="saturation" min="0" max="2" step="0.01"><span class="val" id="saturation_v"></span></div>
+    <div class="row"><label data-i18n="settings.contrast">Contrast</label><input type="range" id="contrast" min="0" max="2" step="0.01"><span class="val" id="contrast_v"></span></div>
+    <div class="row"><label data-i18n="settings.gamma">Gamma</label><input type="range" id="gamma" min="0.3" max="3" step="0.01"><span class="val" id="gamma_v"></span></div>
+    <div class="row"><label data-i18n="dock.exposure">Exposure</label><input type="range" id="exposure" min="-3" max="3" step="0.01"><span class="val" id="exposure_v"></span></div>
+    <div class="row"><label data-i18n="dock.paperwhite">White point</label><input type="range" id="target_paperwhite" min="80" max="400" step="1"><span class="val" id="target_paperwhite_v"></span></div>
+    <div class="row"><label data-i18n="dock.source_peak">Source peak</label><input type="range" id="source_peak_nits" min="200" max="4000" step="10"><span class="val" id="source_peak_nits_v"></span></div>
+    <div class="row"><label data-i18n="dock.offset">Vert. offset</label><input type="number" id="content_offset_y" min="-2160" max="2160" step="2" style="flex:0 0 86px"><span class="hint" style="margin:0">px</span></div>
+    <label class="chk"><input type="checkbox" id="show_cursor"><span data-i18n="settings.show_cursor">Show mouse cursor</span></label>
+    <label class="chk"><input type="checkbox" id="keep_awake"><span data-i18n="dock.keep_awake">Prevent sleep / monitor power-off</span></label>
   </div>
 
   <div class="card">
-    <h2>Crop <small>(live) — Layout „crop_region"</small></h2>
+    <h2><span data-i18n="dock.card.frame">Frame rate / audio</span> <small data-i18n="dock.live">(live)</small></h2>
+    <label class="chk"><input type="checkbox" id="vsync"><span data-i18n="settings.vsync">VSync</span></label>
+    <div class="row"><label data-i18n="dock.target_fps">Target FPS</label>
+      <input type="number" id="target_fps" min="0" max="1000" step="1" style="flex:0 0 86px">
+      <span class="hint" style="margin:0" data-i18n="dock.target_fps_hint">0 = unlimited · VSync off only</span></div>
+    <label class="chk"><input type="checkbox" id="fps_overlay"><span data-i18n="settings.fps_overlay">Show capture / output FPS</span></label>
+    <div class="row"><label data-i18n="settings.fps_overlay_position">FPS position</label>
+      <select id="fps_overlay_position">
+        <option value="top_left" data-i18n="pos.top_left">Top left</option>
+        <option value="top_right" data-i18n="pos.top_right">Top right</option>
+        <option value="bottom_left" data-i18n="pos.bottom_left">Bottom left</option>
+        <option value="bottom_right" data-i18n="pos.bottom_right">Bottom right</option>
+      </select></div>
+    <label class="chk"><input type="checkbox" id="audio_mirror"><span data-i18n="settings.audio_mirror">Mirror audio to the target monitor (HDMI/DP)</span></label>
+  </div>
+
+  <div class="card">
+    <h2><span data-i18n="dock.card.crop">Crop</span> <small data-i18n="dock.crop_hint">(live) — layout "crop_region"</small></h2>
     <div class="row"><label>X</label><input type="range" id="crop_x" min="0" max="1" step="0.01"><span class="val" id="crop_x_v"></span></div>
     <div class="row"><label>Y</label><input type="range" id="crop_y" min="0" max="1" step="0.01"><span class="val" id="crop_y_v"></span></div>
-    <div class="row"><label>Breite</label><input type="range" id="crop_w" min="0.05" max="1" step="0.01"><span class="val" id="crop_w_v"></span></div>
-    <div class="row"><label>Höhe</label><input type="range" id="crop_h" min="0.05" max="1" step="0.01"><span class="val" id="crop_h_v"></span></div>
+    <div class="row"><label data-i18n="dock.width">Width</label><input type="range" id="crop_w" min="0.05" max="1" step="0.01"><span class="val" id="crop_w_v"></span></div>
+    <div class="row"><label data-i18n="dock.height">Height</label><input type="range" id="crop_h" min="0.05" max="1" step="0.01"><span class="val" id="crop_h_v"></span></div>
   </div>
 
   <footer>RitschyMirror · <a href="https://github.com/RitschyRigz/ritschy-mirror" target="_blank">GitHub</a></footer>
@@ -123,6 +143,28 @@ const $ = id => document.getElementById(id);
 let displays = [], windows = [], booted = false, busy = false, lastConfig = null;
 const running = () => $("toggle").dataset.running === "1";
 
+// ── Language pack (same keys as the desktop UI, served by the agent at /lang) ──
+// English fallback for texts set from script (the static ones keep their built-in English).
+const FALLBACK = {
+  "dock.running": "running", "dock.stopped": "stopped",
+  "dock.start": "▶  Start mirror", "dock.stop": "■  Stop mirror",
+  "dock.agent_unreachable": "Agent not reachable",
+  "dock.fps_readout": "Capture {0} · Output {1} fps", "dock.audio": "Audio: {0}",
+};
+let STR = {}, curLang = null;
+const fill = (text, args) => args.reduce((s, a, i) => s.split("{" + i + "}").join(String(a)), text);
+const t = (key, ...args) => fill(STR[key] ?? FALLBACK[key] ?? key, args);
+async function loadLang() {
+  try {
+    const r = await api("/lang");
+    STR = r.strings || {};
+    curLang = r.lang || "en";
+    document.documentElement.lang = curLang;
+    document.querySelectorAll("[data-i18n]").forEach(e => { if (STR[e.dataset.i18n]) e.textContent = STR[e.dataset.i18n]; });
+    document.querySelectorAll("[data-i18n-title]").forEach(e => { if (STR[e.dataset.i18nTitle]) e.title = STR[e.dataset.i18nTitle]; });
+  } catch (e) { /* keep the built-in English text */ }
+}
+
 async function api(path, method = "GET", body) {
   const opt = { method };
   if (body) { opt.headers = { "Content-Type": "application/json" }; opt.body = JSON.stringify(body); }
@@ -130,7 +172,11 @@ async function api(path, method = "GET", body) {
   if (!r.ok) throw new Error("HTTP " + r.status);
   return r.status === 204 ? null : r.json();
 }
-const showErr = () => { $("conn").innerHTML = '<span class="err">Agent nicht erreichbar</span>'; };
+const showErr = () => {
+  const c = $("conn"); c.textContent = "";
+  const s = document.createElement("span"); s.className = "err"; s.textContent = t("dock.agent_unreachable");
+  c.appendChild(s);
+};
 // LIVE takes effect immediately; STRUCT needs a render restart if mirroring is currently active.
 const patch = (obj) => api("/config", "POST", obj).then(applyStatus).catch(showErr);
 async function patchStruct(obj) {
@@ -151,11 +197,18 @@ SLIDERS.forEach(id => {
 });
 
 // ── Live checkboxes + selects ──
-["tonemap_enabled","show_cursor","vsync","keep_awake"].forEach(id =>
-  $(id).addEventListener("change", e => patch({ [id]: e.target.checked })));
+const CHECKS = ["tonemap_enabled","show_cursor","vsync","keep_awake","fps_overlay","audio_mirror"];
+CHECKS.forEach(id => $(id).addEventListener("change", e => patch({ [id]: e.target.checked })));
+$("vsync").addEventListener("change", e => { $("target_fps").disabled = e.target.checked; });
 $("operator").addEventListener("change", e => patch({ operator: e.target.value }));
 $("layout_mode").addEventListener("change", e => patch({ layout_mode: e.target.value }));
+$("fps_overlay_position").addEventListener("change", e => patch({ fps_overlay_position: e.target.value }));
 $("content_offset_y").addEventListener("change", e => patch({ content_offset_y: parseInt(e.target.value || "0", 10) }));
+$("target_fps").addEventListener("change", e => {
+  const v = Math.max(0, Math.min(1000, parseInt(e.target.value || "0", 10) || 0));
+  e.target.value = v;
+  patch({ target_fps: v });
+});
 
 // ── Struct fields (restart if active) ──
 $("output_mode").addEventListener("change", e => patchStruct({ output_mode: e.target.value }));
@@ -246,25 +299,30 @@ function syncMonitorSelection(cfg) {
 
 function applyStatus(st) {
   if (!st) return;
-  $("conn").textContent = "";
+  if (st.lang && curLang && st.lang !== curLang) loadLang();  // UI language changed in the app
+  $("conn").textContent = st.error || "";
   const run = !!st.running;
   $("dot").className = "dot" + (run ? " on" : "");
-  $("state").textContent = run ? "läuft" : "gestoppt";
-  const t = $("toggle");
-  t.dataset.running = run ? "1" : "0";
-  t.textContent = run ? "■  Mirror stoppen" : "▶  Mirror starten";
-  t.className = "toggle" + (run ? "" : " stopped");
-  t.disabled = false;
+  $("state").textContent = t(run ? "dock.running" : "dock.stopped");
+  const tg = $("toggle");
+  tg.dataset.running = run ? "1" : "0";
+  tg.textContent = t(run ? "dock.stop" : "dock.start");
+  tg.className = "toggle" + (run ? "" : " stopped");
+  tg.disabled = false;
+  $("fps_readout").textContent = run ? t("dock.fps_readout", (st.capture_fps ?? 0).toFixed(1), (st.output_fps ?? 0).toFixed(1)) : "";
+  $("audio_readout").textContent = st.audio && st.audio.message ? t("dock.audio", st.audio.message) : "";
   const cfg = st.config || {}; lastConfig = cfg;
   if (!booted) {  // initialize the controls ONCE from the config (no drag clobbering)
     booted = true;
     SLIDERS.forEach(id => { if (cfg[id] != null) { $(id).value = cfg[id]; fmt(id, cfg[id]); } });
-    ["tonemap_enabled","show_cursor","vsync","keep_awake"].forEach(id => { if (cfg[id] != null) $(id).checked = !!cfg[id]; });
-    ["operator","layout_mode","output_mode"].forEach(id => { if (cfg[id]) $(id).value = cfg[id]; });
+    CHECKS.forEach(id => { if (cfg[id] != null) $(id).checked = !!cfg[id]; });
+    ["operator","layout_mode","output_mode","fps_overlay_position"].forEach(id => { if (cfg[id]) $(id).value = cfg[id]; });
     if (cfg.output_bit_depth != null) $("output_bit_depth").value = String(cfg.output_bit_depth);
     if (cfg.window_width != null) $("window_width").value = cfg.window_width;
     if (cfg.window_height != null) $("window_height").value = cfg.window_height;
     if (cfg.content_offset_y != null) $("content_offset_y").value = cfg.content_offset_y;
+    $("target_fps").value = cfg.target_fps ?? 0;
+    $("target_fps").disabled = cfg.vsync !== false;
     if (cfg.capture_mode) $("capture_mode").value = cfg.capture_mode;
     syncMonitorSelection(cfg);
     syncWindowSelection(cfg);
@@ -272,7 +330,7 @@ function applyStatus(st) {
 }
 
 async function poll() { try { applyStatus(await api("/status")); } catch (e) { showErr(); } }
-loadDisplays(); loadWindows(); poll(); setInterval(poll, 2000);
+loadLang().then(() => { loadDisplays(); loadWindows(); poll(); setInterval(poll, 2000); });
 </script>
 </body>
 </html>

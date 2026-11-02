@@ -70,6 +70,73 @@ doesn't touch the renderer or the engine loop. `capture_mode` (structural) selec
   across app launches — and only that window is ever shown, so alt-tabbing never reveals the
   desktop. HDR is inferred from the monitor the window currently sits on.
 
+## Frame pacing — VSync, `target_fps`, skipped frames
+
+The render loop (`MirrorEngine.RunSession`) has two pacing modes:
+
+| Mode | When | Loop |
+|---|---|---|
+| **Source-paced** | `vsync = true`, or `target_fps = 0` | `TryAcquire(timeout 16 ms)` blocks until the source delivers a frame → render → `Present(vsync)` |
+| **Fixed rate** | `vsync = false` and `target_fps > 0` | `FramePacer` sleeps until the next slot → `TryAcquire(timeout 0)` takes the newest frame → render → `Present(0)` |
+
+- **Nothing new → nothing drawn.** Render + Present run only for a new source frame or when
+  something else changed (live config, HDR state, FPS readout). The flip-model swap chain keeps
+  showing the last frame, so a static desktop costs almost no GPU time.
+- **Newest frame first.** Desktop Duplication always returns the accumulated latest image. WGC
+  queues frames oldest-first, so `WindowCapture.TakeNewestFrame` drains the pool and keeps only the
+  last one; it waits on the pool's `FrameArrived` event instead of spinning.
+- **`FramePacer`** uses a high-resolution waitable timer (`CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`,
+  Win10 1803+; plain waitable timer before that), advances deadlines on a fixed grid and re-anchors
+  instead of bursting when it falls behind. Waits are sliced (≤ 50 ms) so `Stop()` stays responsive.
+- Config polling (250 ms) and HDR re-detection (4 s) are wall-clock based, independent of the
+  frame rate. The supervisor's "healthy session" test is time-based (5 s) for the same reason.
+- `target_fps` is clamped to 1–1000 and ignored while VSync is on (`MirrorConfig.EffectiveTargetFps`).
+
+### FPS readout
+
+`FpsCounter` counts acquired frames (capture FPS) and presents (output FPS) and publishes a rate
+once per second. With `fps_overlay` on, `FpsOverlay` rasterises the label with GDI+ into a small
+immutable BGRA texture (only when the text changes) and `Renderer.DrawOverlay` blends it into the
+chosen corner with the cursor's straight-alpha shader — independent of the 8/10-bit swap-chain
+format. The rates are also in `GET /status` (`capture_fps`, `output_fps`).
+
+## Audio mirroring
+
+`AudioMirror` (NAudio 3, WASAPI) copies the **default playback device** (role Multimedia) to the
+**target monitor's HDMI/DP audio endpoint**:
+
+- **Target matching** — Windows names HDMI/DP audio endpoints after the monitor's EDID, so the
+  endpoint whose device description (`PKEY_Device_DeviceDesc`) equals the target monitor's EDID name
+  is the target (`AudioEndpointMatcher`). No name, no match or several matches → **unavailable**,
+  with the reason shown in Settings, the dock and `GET /status → audio`.
+- **Default == target** → **paused** (the sound already plays there; mirroring it would loop it
+  back onto itself).
+- **Live device changes** — an `MMDeviceNotificationClient` signals a dedicated worker thread on
+  default-device change / add / remove / state change; the worker debounces (300 ms) and re-runs the
+  decision, so switching the default from the HDMI monitor to a headset starts the mirror and back
+  pauses it. Callbacks never touch audio objects (Core Audio holds a lock while dispatching).
+- **Pipeline** — `WasapiRecorder` (loopback, shared) → `BufferedWaveProvider` → `WasapiPlayer`
+  (shared mode with `AUTOCONVERTPCM`, so Windows converts sample rate / channel layout). The two
+  devices run on independent clocks: when the queue exceeds 120 ms it is trimmed back to 40 ms,
+  underruns are padded with silence.
+- Lifetime: enabled at render start and on live config reload (`audio_mirror`), kept across a
+  capture reinit, switched off when the render thread ends.
+
+## Language packs
+
+All user-visible text lives in flat JSON packs (`lang/en.json`, `ko.json`, `de.json`), embedded
+into the exe as `lang.<code>.json`. `L.Init` merges English first and the selected language on top,
+then lets a `lang\<code>.json` next to the exe override single keys or add a whole new language —
+missing keys always fall back to English. `app_settings.json → language` is `auto` (Windows UI
+language) or a code.
+
+- Errors meant for the user (`LastError`, preflight) are `LocalizedText` (key + args): shown in the
+  UI language, logged in English via `L.En` — `mirror.log` stays English regardless of the UI.
+- The OBS dock fetches the active pack from `GET /lang` and fills `data-i18n` / `data-i18n-title`
+  elements; the built-in English text is the fallback when the agent is unreachable.
+- Switching the language in Settings re-initialises the packs, relabels the tray and rebuilds the
+  settings window.
+
 ## Resilience — capture-loss recovery
 
 DXGI Desktop Duplication can lose access at runtime (`DXGI_ERROR_ACCESS_LOST`): a source-side
@@ -116,6 +183,11 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 | `WindowCapture.cs` | `WindowCapture` — single window / fullscreen app via Windows.Graphics.Capture |
 | `WindowEnum.cs` | Enumerate capturable windows + resolve a saved window by stable identity (exe+title) |
 | `Shaders.cs` | HLSL (tonemap + crop UV + cursor blend) |
+| `FramePacer.cs` | High-resolution waitable-timer pacing for `target_fps` |
+| `FpsCounter.cs` | Events-per-second meter (capture / output FPS) |
+| `FpsOverlay.cs` | FPS readout texture (GDI+ → immutable BGRA texture) |
+| `AudioMirror.cs` | Default playback device → target monitor HDMI/DP audio (NAudio WASAPI) |
+| `Localization.cs` | Language packs (`L`), `LocalizedText` for user-facing errors |
 | `Win32Window.cs` | Window + mouse-lock hook (`WH_MOUSE_LL`, on its own dedicated thread so the cursor stays smooth — the hook is never serviced on the vsync-bound render thread) |
 | `MonitorNames.cs` | Friendly EDID monitor names (CCD `QueryDisplayConfig`) |
 | `ControlAgent.cs` | HTTP control agent (`HttpListener`) |
@@ -131,7 +203,8 @@ remote controller all write the same file; the render loop reads it live.
 
 **Live keys** (apply immediately): `tonemap_enabled`, `operator`, `source_peak_nits`,
 `target_paperwhite`, `exposure`, `saturation`, `contrast`, `gamma`, `content_offset_y`,
-`vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`.
+`vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`,
+`target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`.
 
 `tonemap_enabled`, `operator`, `source_peak_nits` and `target_paperwhite` are only in effect for
 an **HDR** source — see [Colour pipeline](#colour-pipeline--hdr-vs-sdr-source).
@@ -156,12 +229,14 @@ by `window_exe` + `window_title` (stable identity) instead of `source_display`.
 
 Listens on `http://<bind>:<port>/` — default port **8788**. `bind` = `"+"` makes it reachable
 from the network (requires a URL-ACL / admin; otherwise it falls back to `localhost`).
-Configured via `app_settings.json` (`agent_bind`, `agent_port`, `agent_enabled`).
+Configured via `app_settings.json` (`agent_bind`, `agent_port`, `agent_enabled`); the same file
+holds `autostart_mirror` and the UI `language`.
 
 | Route | Description |
 |---|---|
 | `GET /health` | Ping → `{ok, running}` |
-| `GET /status` | `{running, state, config}` |
+| `GET /status` | `{running, state, lang, config, error, capture_fps, output_fps, audio: {state, message}}` |
+| `GET /lang` | Active language pack `{lang, strings}` (used by the dock) |
 | `GET /config` · `POST /config` | Read config / merge a whitelisted patch |
 | `POST /start` · `/stop` · `/restart` | Control rendering |
 | `GET /displays` | Enumerated displays (index, name, friendly, resolution, hdr, adapter) |

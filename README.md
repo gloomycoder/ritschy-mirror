@@ -8,13 +8,15 @@
   <b>Mirror any monitor to your capture card — with proper HDR&nbsp;→&nbsp;SDR tonemapping.</b>
 </p>
 
+<p align="center">English · <a href="README.ko.md">한국어</a></p>
+
 <p align="center">
   A lightweight Windows tool for <b>dual-PC / capture-card streaming setups</b>.<br>
   Pick a source monitor, fit it cleanly onto your capture display, lock the mouse out — done.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.3.2-2ea0c9">
+  <img src="https://img.shields.io/badge/version-1.4.0-2ea0c9">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20(x64)-2ea0c9">
   <img src="https://img.shields.io/badge/license-MIT-3aa757">
   <img src="https://img.shields.io/badge/.NET-9-512bd4">
@@ -83,13 +85,28 @@ sends the result to the display your capture card is plugged into.
   **live image + crop sliders**. Control the mirror without alt-tabbing. See below.
 - 🎛️ **HTTP API** — `start` / `stop` / `config` / `displays` over LAN, so Stream Deck (via a
   web-request plugin) and custom dashboards can drive it too.
+- ⏱️ **Target FPS** *(optional, VSync off only)* — cap the mirror at e.g. 30 / 60 / 120 fps.
+  Frames are paced with a high-resolution timer, nothing is rendered or presented while the source
+  hasn't changed, and every output slot uses the **newest** source frame (no queued, stale frames →
+  no extra latency). With VSync on, the display refresh paces the output and the limit is ignored.
+- 🔊 **Audio mirroring** *(optional)* — copies the Windows **default playback device** to the
+  HDMI/DP audio of the target monitor, so the capture card gets the sound too. It reacts to device
+  changes live: while the default output *is* the target monitor it pauses (with the reason shown),
+  switch the default to your headset and it starts by itself. If the target monitor's audio device
+  can't be identified, it stays off and says why.
+- 📊 **Capture / output FPS readout** *(optional, for verification)* — shows the capture and output
+  frame rates in a corner of your choice (top/bottom, left/right). Note that it is drawn into the
+  mirrored picture, so the capture card sees it as well.
+- 🌐 **Language packs** — UI in **English, 한국어 and Deutsch**, following the Windows display
+  language (or picked in Settings). Drop a `lang\<code>.json` next to the exe to tweak a
+  translation or add a new language — the OBS dock uses the same packs.
 
 ---
 
 ## Download & Install
 
 1. Go to the [**Releases**](https://github.com/RitschyRigz/ritschy-mirror/releases) page and
-   download **`RitschyMirror-Setup-1.3.2.exe`**.
+   download **`RitschyMirror-Setup-1.4.0.exe`**.
 2. Run it. It installs **per-user — no admin / UAC prompt** (like the VS Code user installer),
    into `…\AppData\Local\Programs\RitschyMirror`.
 3. Pick your options (desktop icon, auto-start), finish, and the app starts in your tray.
@@ -105,10 +122,10 @@ removes itself completely, including its config.
 
 ## Quick start
 
-1. Click the tray icon → **Einstellungen / Settings**.
-2. **Quell-Monitor** = the monitor you want to capture. **Ziel-Monitor** = the display your
+1. Click the tray icon → **Settings**.
+2. **Source monitor** = the monitor you want to capture. **Target monitor** = the display your
    capture card is plugged into.
-3. Pick a **Layout-Modus** (`fit` is the safe default) and **Ausgabe-Modus**
+3. Pick a **Layout mode** (`fit` is the safe default) and **Output mode**
    (`fullscreen_block` if you want the mouse locked out of the capture display).
 4. Hit **Start** in the tray menu (or in the settings window).
 5. Tune the image live with the **Tonemap / sliders** if your source is HDR.
@@ -142,8 +159,11 @@ GUI writes them):
 
 - **`mirror_config.json`** — render parameters. Image & layout keys apply **live**; structural
   keys (`source_display`, `target_display`, `output_mode`, `output_bit_depth`, window size) take
-  effect on the next **render restart**.
-- **`app_settings.json`** — the HTTP agent (port / bind / enabled) and auto-start.
+  effect on the next **render restart**. New in 1.4 (all live): `target_fps` (0 = unlimited),
+  `fps_overlay`, `fps_overlay_position` (`top_left` / `top_right` / `bottom_left` /
+  `bottom_right`), `audio_mirror`.
+- **`app_settings.json`** — the HTTP agent (port / bind / enabled), auto-start and `language`
+  (`auto`, `en`, `ko`, `de`, or any pack you add).
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full key reference, the HTTP agent
 API, and how the rendering pipeline works internally.
@@ -170,7 +190,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 ## Tech
 
 C# / .NET 9 + [Vortice.Windows](https://github.com/amerkoleci/Vortice.Windows) (Direct3D 11 /
-DXGI). It uses **DXGI Desktop Duplication** (FP16, HDR-capable) → an **HLSL tonemap shader** →
+DXGI) + [NAudio](https://github.com/naudio/NAudio) (WASAPI, audio mirroring). It uses **DXGI Desktop Duplication** (FP16, HDR-capable) → an **HLSL tonemap shader** →
 a flip-model swap chain. Full internals in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## License

@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.4.0 — frame limit, audio mirroring, FPS readout, language packs
+
+- **New: Target FPS** (`target_fps`, live). With VSync off, the mirror can be capped at a fixed
+  frame rate. Frames are paced with a high-resolution timer and every slot shows the **newest**
+  source frame, so a lower rate never adds queued, stale frames. With VSync on the setting is
+  ignored (and greyed out) — the display refresh paces the output.
+- **Less work when nothing changes.** Rendering and presenting now only happen for a new source
+  frame (or a settings change). A static desktop, or a source slower than the output, no longer
+  burns GPU time. In window-capture mode the loop now waits for the next frame instead of spinning,
+  and always skips ahead to the newest queued frame.
+- **New: audio mirroring** (`audio_mirror`, live). Copies the Windows default playback device to the
+  target monitor's HDMI/DP audio, so the capture card receives the sound too. It follows device
+  changes live: while the default output already is the target monitor it pauses, switching the
+  default to e.g. a headset starts it automatically. If the target's audio device can't be found
+  (no EDID name, no match, several identical monitors) it stays off and shows why. Built on NAudio.
+- **New: capture / output FPS readout** (`fps_overlay`, `fps_overlay_position`, live) — a small
+  label in the corner of your choice, for verifying the pipeline. It is part of the mirrored
+  picture, so the capture card sees it too. The rates are also reported by `GET /status`.
+- **New: language packs.** The settings window, tray menu, OBS dock and user-facing errors are now
+  available in English, Korean and German, following the Windows display language or the choice in
+  Settings. A `lang\<code>.json` next to the exe overrides a translation or adds a language.
+- Code comments and `mirror.log` messages are now English.
+- The dock shows the last error, the FPS rates and the audio-mirror status.
+
 ## v1.3.2 — fix a badly darkened picture when the source monitor is in SDR mode
 
 - **Fixed: with HDR turned off on the source monitor, the mirrored picture came out far too dark.**

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
@@ -42,12 +43,32 @@ public sealed class MirrorEngine
     private readonly object _gate = new();
     private Thread? _thread;
     private volatile bool _stop;
-    public string LastError { get; private set; } = "";
+    // User-facing error, kept as key + args so the UI shows it in the current language.
+    private volatile LocalizedText? _lastError;
+    public string LastError => _lastError?.Text ?? "";
+
+    /// <summary>Copies the default playback device to the target monitor's HDMI/DP audio (optional).</summary>
+    public AudioMirror Audio { get; }
+
+    // Capture / output frame rates of the running session (0 while stopped).
+    private readonly FpsCounter _captureFps = new();
+    private readonly FpsCounter _outputFps = new();
+    public double CaptureFps => IsRunning ? _captureFps.Fps : 0;
+    public double OutputFps => IsRunning ? _outputFps.Fps : 0;
+
+    /// <summary>Audio-mirror status line for the UI, given whether audio_mirror is switched on.</summary>
+    public string AudioStatusText(bool enabledInConfig)
+    {
+        if (!enabledInConfig) return L.T("audio.status.off");
+        if (!IsRunning || Audio.State == AudioMirrorState.Off) return L.T("audio.status.idle");
+        return Audio.StatusText;
+    }
 
     public MirrorEngine(string baseDir)
     {
         ConfigPath = Path.Combine(baseDir, "mirror_config.json");
         LogPath = Path.Combine(baseDir, "mirror.log");
+        Audio = new AudioMirror(Log);
     }
 
     public bool IsRunning => _thread is { IsAlive: true };
@@ -66,7 +87,7 @@ public sealed class MirrorEngine
         {
             if (IsRunning) return;
             _stop = false;
-            LastError = "";
+            _lastError = null;
             _thread = new Thread(RenderThreadMain) { IsBackground = true, Name = "MirrorRender" };
             _thread.SetApartmentState(ApartmentState.STA);
             _thread.Start();
@@ -101,42 +122,42 @@ public sealed class MirrorEngine
     /// set but no monitor matches ⇒ idx=-1 + plain-text error, so the wrong screen is NOT
     /// silently mirrored.
     /// </summary>
-    public static (int idx, string error) ResolveSelection(
+    public static (int idx, LocalizedText? error) ResolveSelection(
         string key, string label, int index,
-        IReadOnlyList<(string Key, string Label)> displays, string role)
+        IReadOnlyList<(string Key, string Label)> displays, bool isSource)
     {
-        if (displays.Count == 0) return (-1, "Keine Displays gefunden");
+        if (displays.Count == 0) return (-1, new LocalizedText("error.no_displays"));
         bool hasIdentity = !string.IsNullOrWhiteSpace(key) || !string.IsNullOrWhiteSpace(label);
         if (hasIdentity)
         {
             if (!string.IsNullOrWhiteSpace(key))
                 for (int i = 0; i < displays.Count; i++)
-                    if (string.Equals(displays[i].Key, key, StringComparison.OrdinalIgnoreCase)) return (i, "");
+                    if (string.Equals(displays[i].Key, key, StringComparison.OrdinalIgnoreCase)) return (i, null);
             if (!string.IsNullOrWhiteSpace(label))
             {
                 int found = -1, count = 0;
                 for (int i = 0; i < displays.Count; i++)
                     if (string.Equals(displays[i].Label, label, StringComparison.OrdinalIgnoreCase)) { found = i; count++; }
-                if (count == 1) return (found, "");
+                if (count == 1) return (found, null);
             }
             string name = string.IsNullOrWhiteSpace(label) ? key : label;
-            return (-1, $"{role}-Monitor '{name}' nicht verbunden");
+            return (-1, new LocalizedText(isSource ? "error.source_not_connected" : "error.target_not_connected", name));
         }
-        return (Math.Clamp(index, 0, displays.Count - 1), ""); // old config without identity
+        return (Math.Clamp(index, 0, displays.Count - 1), null); // old config without identity
     }
 
     /// <summary>Pre-check (tray/GUI): can the configured source + target be resolved right now?
     /// null = ok, otherwise a plain-text error. Starts nothing.</summary>
-    public string? Preflight()
+    public LocalizedText? Preflight()
     {
         var displays = EnumerateDisplays();
-        if (displays.Count == 0) return "Keine Displays gefunden";
+        if (displays.Count == 0) return new LocalizedText("error.no_displays");
         var cfg = MirrorConfig.Load(ConfigPath);
         var ids = displays.Select(d => (Key: d.Key, Label: d.Friendly)).ToList();
-        var (_, se) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, "Quell");
-        if (se.Length != 0) return se;
-        var (_, de) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, "Ziel");
-        if (de.Length != 0) return de;
+        var (_, se) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, isSource: true);
+        if (se != null) return se;
+        var (_, de) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, isSource: false);
+        if (de != null) return de;
         return null;
     }
 
@@ -145,11 +166,17 @@ public sealed class MirrorEngine
     /// or fatal (config/selection error — a reinit would not help).</summary>
     private enum SessionResult { Stopped, Lost, Fatal }
 
-    // A session that rendered this many frames cleanly counts as "ran healthy" → a
+    // A session that mirrored this long without error counts as "ran healthy" → a
     // subsequent loss is transient and resets the reinit budget (only tight
-    // failure chains count toward the abort limit). ~5 s at 60 fps.
-    private const long HealthyFrameThreshold = 300;
+    // failure chains count toward the abort limit). Time-based, because frames are no
+    // longer presented while the source is static or the frame limit is low.
+    private const long HealthySessionMs = 5000;
     private const int MaxConsecutiveReinit = 8;
+
+    // Render-loop cadence (wall clock, independent of the frame rate).
+    private const int AcquireTimeoutMs = 16;     // unpaced: wait this long for a new source frame
+    private const long ConfigPollMs = 250;       // mtime poll of mirror_config.json
+    private const long HdrPollMs = 4000;         // re-read the source's HDR state
 
     private void RenderThreadMain()
     {
@@ -157,16 +184,16 @@ public sealed class MirrorEngine
         while (!_stop)
         {
             SessionResult result;
-            long frames = 0;
+            long healthyMs = 0;
             try
             {
-                (result, frames) = RunSession();
+                (result, healthyMs) = RunSession();
             }
             catch (Exception ex)
             {
                 // Hard error during setup (e.g. device/capture creation) → treat it like a
                 // loss and retry with backoff instead of killing the thread.
-                LastError = ex.Message;
+                _lastError = new LocalizedText("error.raw", ex.Message);
                 Log("ERROR (render session): " + ex);
                 result = SessionResult.Lost;
             }
@@ -175,12 +202,12 @@ public sealed class MirrorEngine
                 break;
 
             // If the session ran healthy long enough beforehand, the loss was transient → reset the budget.
-            if (frames >= HealthyFrameThreshold) consecutive = 0;
+            if (healthyMs >= HealthySessionMs) consecutive = 0;
             consecutive++;
             if (consecutive > MaxConsecutiveReinit)
             {
-                LastError = "Spiegelung ließ sich nach mehreren Versuchen nicht wiederherstellen — gestoppt.";
-                Log("ABORT: " + LastError);
+                _lastError = new LocalizedText("error.recovery_failed");
+                Log("ABORT: " + _lastError.English);
                 break;
             }
 
@@ -189,6 +216,7 @@ public sealed class MirrorEngine
             Log($"Mirroring lost — full reinit in {backoffMs} ms (attempt {consecutive}/{MaxConsecutiveReinit}).");
             InterruptibleSleep(backoffMs);
         }
+        Audio.SetDesired(false, "");  // audio keeps running across a reinit, but not past the mirror
         Log("Render thread finished.");
     }
 
@@ -214,9 +242,9 @@ public sealed class MirrorEngine
         return false;
     }
 
-    private (SessionResult result, long frames) RunSession()
+    private (SessionResult result, long healthyMs) RunSession()
     {
-        LastError = "";  // optimistic: a successful reinit should not leave a stale message behind
+        _lastError = null;  // optimistic: a successful reinit should not leave a stale message behind
         var cfg = MirrorConfig.Load(ConfigPath);
         Log("RitschyMirror render start.");
 
@@ -248,7 +276,7 @@ public sealed class MirrorEngine
                 Log($"  Display {displays.Count - 1}: {d.DeviceName} ({(friendly.Length > 0 ? friendly : "?")})  {dc.Right - dc.Left}x{dc.Bottom - dc.Top}  HDR={hdr}  [{adName}]");
             }
         }
-        if (displays.Count == 0) { Log("No displays found."); LastError = "Keine Displays gefunden"; factory.Dispose(); return (SessionResult.Fatal, 0); }
+        if (displays.Count == 0) { Log("No displays found."); _lastError = new LocalizedText("error.no_displays"); factory.Dispose(); return (SessionResult.Fatal, 0); }
 
         // Always resolve the target monitor via stable identity (both source modes mirror to it);
         // if the configured monitor is missing → clean abort with a plain-text message.
@@ -259,11 +287,11 @@ public sealed class MirrorEngine
             foreach (var ad in adapters) ad.Dispose();
             factory.Dispose();
         }
-        var (dstIdx, dstErr) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, "Ziel");
-        if (dstErr.Length != 0)
+        var (dstIdx, dstErr) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, isSource: false);
+        if (dstErr != null)
         {
-            Log("Start aborted: " + dstErr);
-            LastError = dstErr;
+            Log("Start aborted: " + dstErr.English);
+            _lastError = dstErr;
             CleanupEnum();
             return (SessionResult.Fatal, 0);
         }
@@ -281,11 +309,11 @@ public sealed class MirrorEngine
             // Window source (WGC): saved identity → current HWND. If the window is missing
             // (app not open) → clean abort with a plain-text message instead of blindly mirroring something.
             var (hwnd, winErr) = WindowEnum.Resolve(cfg.WindowExe, cfg.WindowTitle);
-            if (winErr.Length != 0 || hwnd == IntPtr.Zero)
+            if (winErr != null || hwnd == IntPtr.Zero)
             {
-                string e = winErr.Length != 0 ? winErr : "Kein Fenster ausgewählt";
-                Log("Start aborted: " + e);
-                LastError = e;
+                var e = winErr ?? new LocalizedText("error.no_window_selected");
+                Log("Start aborted: " + e.English);
+                _lastError = e;
                 CleanupEnum();
                 return (SessionResult.Fatal, 0);
             }
@@ -307,11 +335,11 @@ public sealed class MirrorEngine
         else
         {
             // Monitor source (Desktop Duplication, duplication-bound) → device on the SOURCE adapter.
-            var (srcIdx, srcErr) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, "Quell");
-            if (srcErr.Length != 0)
+            var (srcIdx, srcErr) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, isSource: true);
+            if (srcErr != null)
             {
-                Log("Start aborted: " + srcErr);
-                LastError = srcErr;
+                Log("Start aborted: " + srcErr.English);
+                _lastError = srcErr;
                 CleanupEnum();
                 return (SessionResult.Fatal, 0);
             }
@@ -363,56 +391,83 @@ public sealed class MirrorEngine
 
         DateTime lastCfgWrite = SafeWriteTime();
         bool lastSrcHdr = capture.InputIsHdr;
-        int frame = 0;
-        long framesRendered = 0;
         var sessionResult = SessionResult.Stopped;  // clean default: window closed / Stop()
+
+        using var pacer = new FramePacer();
+        using var overlay = new FpsOverlay(device, outH);
+        _captureFps.Reset();
+        _outputFps.Reset();
+        Audio.SetDesired(cfg.AudioMirror, dst.Friendly);
+        LogFramePacing(cfg);
+
+        var clock = Stopwatch.StartNew();
+        long nextCfgPollMs = ConfigPollMs, nextHdrPollMs = HdrPollMs;
+        bool dirty = true;  // something other than a new source frame needs a redraw
+        bool overlayFailed = false;
+        long presented = 0;
 
         while (window.Running && !_stop)
         {
             window.PumpMessages();
+            long nowMs = clock.ElapsedMilliseconds;
 
             // Config hot reload (mtime polling). LIVE parameters only; structure needs Restart.
-            if ((frame++ & 31) == 0)
+            if (nowMs >= nextCfgPollMs)
             {
+                nextCfgPollMs = nowMs + ConfigPollMs;
                 var t = SafeWriteTime();
                 if (t != lastCfgWrite)
                 {
                     lastCfgWrite = t;
                     var nc = MirrorConfig.Load(ConfigPath);
-                    cfg.TonemapEnabled = nc.TonemapEnabled; cfg.Operator = nc.Operator;
-                    cfg.SourcePeakNits = nc.SourcePeakNits; cfg.TargetPaperwhite = nc.TargetPaperwhite;
-                    cfg.Exposure = nc.Exposure; cfg.Saturation = nc.Saturation;
-                    cfg.Contrast = nc.Contrast; cfg.Gamma = nc.Gamma; cfg.ContentOffsetY = nc.ContentOffsetY;
-                    cfg.Vsync = nc.Vsync;
-                    cfg.LayoutMode = nc.LayoutMode;
-                    cfg.CropX = nc.CropX; cfg.CropY = nc.CropY; cfg.CropW = nc.CropW; cfg.CropH = nc.CropH;
-                    cfg.ShowCursor = nc.ShowCursor;
-                    cfg.KeepAwake = nc.KeepAwake;
+                    bool pacingChanged = nc.EffectiveTargetFps != cfg.EffectiveTargetFps || nc.Vsync != cfg.Vsync;
+                    CopyLiveKeys(nc, cfg);
                     // Sleep-mode lock on/off live, without a render restart.
                     if (cfg.KeepAwake && !keepAwakeOn) { KeepAwakeBegin(); keepAwakeOn = true; }
                     else if (!cfg.KeepAwake && keepAwakeOn) { KeepAwakeEnd(); keepAwakeOn = false; }
                     // Source-side live parameters (e.g. WGC cursor capture in window mode).
                     capture.ApplyLiveConfig(cfg);
+                    Audio.SetDesired(cfg.AudioMirror, dst.Friendly);
+                    if (pacingChanged) { pacer.Reset(); LogFramePacing(cfg); }
+                    dirty = true;
                     Log("Config reloaded (live parameters).");
                 }
             }
 
-            // Track HDR on/off at the monitor during operation (about every 256 frames). Without it
-            // the shader keeps using the wrong source curve after a toggle: HDR source
-            // as SDR = blown out, SDR source as HDR = too dark.
-            if ((frame & 255) == 0)
+            // Track HDR on/off at the monitor during operation. Without it the shader keeps
+            // using the wrong source curve after a toggle: HDR source as SDR = blown out,
+            // SDR source as HDR = too dark.
+            if (nowMs >= nextHdrPollMs)
             {
+                nextHdrPollMs = nowMs + HdrPollMs;
                 capture.RefreshSourceState();
                 if (capture.InputIsHdr != lastSrcHdr)
                 {
                     lastSrcHdr = capture.InputIsHdr;
+                    dirty = true;
                     Log(lastSrcHdr
                         ? "Source switched to HDR → tonemapping path active."
                         : "Source switched to SDR → 1:1 passthrough, no tonemapping.");
                 }
             }
 
-            try { capture.TryAcquire(context); }
+            // Frame pacing. VSync on or no limit: block until the source delivers a new frame (or
+            // the timeout). target_fps with VSync off: sleep until the next slot, THEN take whatever
+            // is newest — the capture keeps only the latest image, so a slot never shows a stale frame.
+            int fps = cfg.EffectiveTargetFps;
+            bool newFrame;
+            try
+            {
+                if (fps > 0)
+                {
+                    pacer.WaitForNextFrame(fps, () => _stop || !window.Running, window.PumpMessages);
+                    newFrame = capture.TryAcquire(context, 0);
+                }
+                else
+                {
+                    newFrame = capture.TryAcquire(context, AcquireTimeoutMs);
+                }
+            }
             catch (Exception ex)
             {
                 // ACCESS_LOST or similar → first a quick recovery of the source (transient case).
@@ -425,16 +480,43 @@ public sealed class MirrorEngine
                     sessionResult = SessionResult.Lost;
                     break;
                 }
+                pacer.Reset();
+                dirty = true;
                 continue;  // fresh duplication → next round acquires cleanly again
             }
+            if (newFrame) _captureFps.Tick();
 
-            if (capture.Srv != null)
+            // FPS readout: rates are published once per second; re-rasterise only when they change.
+            bool ratesChanged = _captureFps.Update() | _outputFps.Update();
+            bool showOverlay = cfg.FpsOverlay && !overlayFailed;
+            if (showOverlay && (ratesChanged || overlay.Srv is null))
             {
-                renderer.Render(capture, cfg);
-                renderer.Present(cfg.Vsync);
-                framesRendered++;
+                try
+                {
+                    if (overlay.SetText(FpsOverlay.FormatRates(_captureFps.Fps, _outputFps.Fps))) dirty = true;
+                }
+                catch (Exception ex)
+                {
+                    // A diagnostics aid must never take the mirror down (GDI+/texture failure).
+                    overlayFailed = true;
+                    showOverlay = false;
+                    Log("FPS overlay disabled for this session: " + ex.Message);
+                }
             }
+
+            // Nothing new to show → skip render + present entirely (the display keeps the last
+            // frame). This is where an idle source or a frame limit saves GPU and copy work.
+            if (capture.Srv == null || !(newFrame || dirty)) continue;
+
+            renderer.Render(capture, cfg);
+            if (showOverlay) renderer.DrawOverlay(overlay, cfg.FpsOverlayPosition);
+            renderer.Present(cfg.Vsync);
+            _outputFps.Tick();
+            presented++;
+            dirty = false;
         }
+        // Only a session that actually showed frames counts as healthy (see HealthySessionMs).
+        long healthyMs = presented > 0 ? clock.ElapsedMilliseconds : 0;
 
         Log(sessionResult == SessionResult.Lost
             ? "Render session lost, cleaning up for reinit."
@@ -450,7 +532,37 @@ public sealed class MirrorEngine
         foreach (var disp in displays) disp.Output.Dispose();
         foreach (var ad in adapters) ad.Dispose();
         factory.Dispose();
-        return (sessionResult, framesRendered);
+        return (sessionResult, healthyMs);
+    }
+
+    /// <summary>Copy the LIVE keys of a freshly loaded config into the running one.</summary>
+    private static void CopyLiveKeys(MirrorConfig from, MirrorConfig to)
+    {
+        to.TonemapEnabled = from.TonemapEnabled; to.Operator = from.Operator;
+        to.SourcePeakNits = from.SourcePeakNits; to.TargetPaperwhite = from.TargetPaperwhite;
+        to.Exposure = from.Exposure; to.Saturation = from.Saturation;
+        to.Contrast = from.Contrast; to.Gamma = from.Gamma; to.ContentOffsetY = from.ContentOffsetY;
+        to.Vsync = from.Vsync;
+        to.LayoutMode = from.LayoutMode;
+        to.CropX = from.CropX; to.CropY = from.CropY; to.CropW = from.CropW; to.CropH = from.CropH;
+        to.ShowCursor = from.ShowCursor;
+        to.KeepAwake = from.KeepAwake;
+        to.TargetFps = from.TargetFps;
+        to.FpsOverlay = from.FpsOverlay; to.FpsOverlayPosition = from.FpsOverlayPosition;
+        to.AudioMirror = from.AudioMirror;
+    }
+
+    private void LogFramePacing(MirrorConfig cfg)
+    {
+        int fps = cfg.EffectiveTargetFps;
+        if (cfg.Vsync)
+            Log(cfg.TargetFps > 0
+                ? $"Frame pacing: VSync (target_fps {cfg.TargetFps} ignored while VSync is on)."
+                : "Frame pacing: VSync.");
+        else
+            Log(fps > 0
+                ? $"Frame pacing: target {fps} fps (VSync off)."
+                : "Frame pacing: unlimited (VSync off, no target_fps).");
     }
 
     private DateTime SafeWriteTime()

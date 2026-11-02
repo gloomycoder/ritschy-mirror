@@ -170,6 +170,30 @@ public sealed class Renderer : IDisposable
     }
 
     /// <summary>
+    /// Draw the FPS readout into a corner of the output frame (after <see cref="Render"/>, before
+    /// <see cref="Present"/>). Pixel-exact viewport, so the label is sampled 1:1 and stays crisp.
+    /// </summary>
+    public void DrawOverlay(FpsOverlay overlay, string position)
+    {
+        if (overlay.Srv is null) return;
+        float margin = System.Math.Max(8, Height / 90);
+        string pos = (position ?? "").Trim().ToLowerInvariant();
+        float x = pos.EndsWith("right") ? Width - overlay.Width - margin : margin;
+        float y = pos.StartsWith("bottom") ? Height - overlay.Height - margin : margin;
+
+        _ctx.OMSetRenderTargets(_rtv);
+        _ctx.OMSetBlendState(_blend);
+        _ctx.RSSetViewport(new Viewport((float)System.Math.Round(x), (float)System.Math.Round(y),
+                                        overlay.Width, overlay.Height, 0f, 1f));
+        _ctx.VSSetShader(_vs);
+        _ctx.PSSetShader(_psCursor);
+        _ctx.PSSetSampler(0, _sampler);
+        _ctx.PSSetShaderResource(0, overlay.Srv);
+        _ctx.Draw(3, 0);
+        _ctx.OMSetBlendState(null);
+    }
+
+    /// <summary>
     /// Viewport (placement in the output frame) + source crop (UV 0..1) from layout_mode:
     ///   fit         — whole source centered, aspect ratio preserved (nothing cropped)
     ///   stretch     — source fills the frame (aspect ratio ignored)

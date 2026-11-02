@@ -43,6 +43,16 @@ public sealed class MirrorConfig
     // On by default; can be toggled live (takes effect immediately on the running mirror).
     [JsonPropertyName("keep_awake")]       public bool KeepAwake { get; set; } = true;
 
+    // ── Frame pacing / diagnostics / audio (live) ───────────────────────
+    // Frame limit while VSync is OFF (0 = unlimited). Ignored with VSync on — the display paces then.
+    [JsonPropertyName("target_fps")]       public int TargetFps { get; set; } = 0;
+    // Capture/output FPS readout drawn onto the mirror (verification aid; it IS visible on the capture card).
+    [JsonPropertyName("fps_overlay")]      public bool FpsOverlay { get; set; } = false;
+    // Overlay corner: "top_left" | "top_right" | "bottom_left" | "bottom_right".
+    [JsonPropertyName("fps_overlay_position")] public string FpsOverlayPosition { get; set; } = "top_left";
+    // Copy the default playback device to the target monitor's HDMI/DP audio endpoint.
+    [JsonPropertyName("audio_mirror")]     public bool AudioMirror { get; set; } = false;
+
     // ── Source: whole monitor OR a window (restart required) ────────
     // capture_mode: "monitor" (whole screen via Desktop Duplication, default) |
     //               "window"  (a window / a fullscreen app via Windows.Graphics.Capture).
@@ -91,6 +101,12 @@ public sealed class MirrorConfig
         return m;
     }
 
+    public const int MinTargetFps = 1, MaxTargetFps = 1000;
+    public static readonly string[] OverlayPositions = { "top_left", "top_right", "bottom_left", "bottom_right" };
+
+    /// <summary>Frame limit actually in effect: only with VSync off (0 = unlimited / VSync paces).</summary>
+    public int EffectiveTargetFps => Vsync || TargetFps <= 0 ? 0 : Math.Clamp(TargetFps, MinTargetFps, MaxTargetFps);
+
     /// <summary>Effective source mode: "window" or (default) "monitor".</summary>
     public string ResolveCaptureMode()
         => (CaptureMode ?? "").Trim().ToLowerInvariant() == "window" ? "window" : "monitor";
@@ -101,6 +117,7 @@ public sealed class MirrorConfig
         "tonemap_enabled", "operator", "source_peak_nits", "target_paperwhite",
         "exposure", "saturation", "contrast", "gamma", "content_offset_y", "vsync",
         "layout_mode", "crop_x", "crop_y", "crop_w", "crop_h", "show_cursor", "keep_awake",
+        "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror",
     };
     public static readonly HashSet<string> StructKeys = new(StringComparer.OrdinalIgnoreCase)
     {

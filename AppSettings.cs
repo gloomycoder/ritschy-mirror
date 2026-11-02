@@ -16,6 +16,8 @@ public sealed class AppSettings
     [JsonPropertyName("agent_enabled")] public bool AgentEnabled { get; set; } = true;
     // Start mirroring automatically on app start (otherwise only tray idle).
     [JsonPropertyName("autostart_mirror")] public bool AutostartMirror { get; set; } = false;
+    // UI language pack: "auto" (Windows UI language, English fallback) or a code such as "ko"/"en"/"de".
+    [JsonPropertyName("language")]      public string Language { get; set; } = L.Auto;
 
     private static readonly JsonSerializerOptions ReadOpts = new()
     {

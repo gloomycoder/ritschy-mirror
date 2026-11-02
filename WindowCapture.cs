@@ -36,6 +36,14 @@ public sealed class WindowCapture : ICaptureSource
 
     private int _poolW, _poolH;
     private volatile bool _sourceLost;   // window closed (Closed event)
+    // Newest-frame slot. FrameArrived (free-threaded pool → WGC worker thread) pulls every frame out
+    // of the pool immediately and keeps only the newest here. If frames were left queued instead, a
+    // full pool makes WGC drop the NEW frames — at a low target_fps the mirror would show frames that
+    // are a whole interval old. The render thread takes ownership of the slot in TryAcquire.
+    private const int PoolBuffers = 3;   // one in the slot, one being copied, one free for WGC
+    private readonly object _frameLock = new();
+    private Direct3D11CaptureFrame? _latest;
+    private readonly AutoResetEvent _frameArrived = new(false);
     private bool _showCursor;
 
     public int Width { get; private set; }
@@ -70,15 +78,42 @@ public sealed class WindowCapture : ICaptureSource
         _poolH = size.Height > 0 ? size.Height : 1;
         if (Width == 0) { Width = _poolW; Height = _poolH; }   // provisional size until the first frame
         _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
-            _d3dDevice, DirectXPixelFormat.R16G16B16A16Float, 2, new SizeInt32 { Width = _poolW, Height = _poolH });
+            _d3dDevice, DirectXPixelFormat.R16G16B16A16Float, PoolBuffers, new SizeInt32 { Width = _poolW, Height = _poolH });
+        _framePool.FrameArrived += OnFrameArrived;
         _session = _framePool.CreateCaptureSession(_item);
         _session.IsCursorCaptureEnabled = _showCursor;
         TryDisableBorder(_session);
         _session.StartCapture();
     }
 
+    private void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
+    {
+        // Raised on a WGC thread; may race with StopSession/Dispose → never let it throw there.
+        try
+        {
+            var frame = sender.TryGetNextFrame();
+            if (frame is null) return;
+            while (sender.TryGetNextFrame() is { } newer) { frame.Dispose(); frame = newer; }
+            Direct3D11CaptureFrame? replaced;
+            lock (_frameLock) { replaced = _latest; _latest = frame; }
+            replaced?.Dispose();   // never shown — a newer frame superseded it
+            _frameArrived.Set();
+        }
+        catch (ObjectDisposedException) { /* pool/session torn down concurrently */ }
+        catch (System.Runtime.InteropServices.COMException) { /* same, surfaced as an RO error */ }
+    }
+
+    private void DropLatest()
+    {
+        Direct3D11CaptureFrame? f;
+        lock (_frameLock) { f = _latest; _latest = null; }
+        f?.Dispose();
+    }
+
     private void StopSession()
     {
+        if (_framePool != null) _framePool.FrameArrived -= OnFrameArrived;
+        DropLatest();   // frames belong to the pool → release before disposing it
         try { _session?.Dispose(); } catch { /* already closed */ }
         try { _framePool?.Dispose(); } catch { }
         _session = null;
@@ -107,8 +142,8 @@ public sealed class WindowCapture : ICaptureSource
         var pool = _framePool;
         if (pool is null) return false;
 
-        using var frame = pool.TryGetNextFrame();
-        if (frame is null) return false; // no new frame yet (not an error)
+        using var frame = TakeNewestFrame(timeoutMs);
+        if (frame is null) return false; // no new frame within the timeout (not an error)
 
         using var surface = frame.Surface;
         using var tex = GetTextureFromSurface(surface);
@@ -124,9 +159,31 @@ public sealed class WindowCapture : ICaptureSource
         if (content.Width > 0 && content.Height > 0 && (content.Width != _poolW || content.Height != _poolH))
         {
             _poolW = content.Width; _poolH = content.Height;
-            try { pool.Recreate(_d3dDevice, DirectXPixelFormat.R16G16B16A16Float, 2, content); } catch { /* next attempt */ }
+            try { pool.Recreate(_d3dDevice, DirectXPixelFormat.R16G16B16A16Float, PoolBuffers, content); } catch { /* next attempt */ }
         }
         return true;
+    }
+
+    /// <summary>
+    /// Take ownership of the newest frame, waiting up to <paramref name="timeoutMs"/> if none has
+    /// arrived since the last call (0 = just poll). null = no new frame.
+    /// </summary>
+    private Direct3D11CaptureFrame? TakeNewestFrame(int timeoutMs)
+    {
+        var frame = TakeLatest();
+        if (frame is null && timeoutMs > 0 && _frameArrived.WaitOne(timeoutMs))
+            frame = TakeLatest();
+        return frame;
+    }
+
+    private Direct3D11CaptureFrame? TakeLatest()
+    {
+        lock (_frameLock)
+        {
+            var f = _latest;
+            _latest = null;
+            return f;
+        }
     }
 
     /// <summary>Re-create session/frame pool on the same window (transient errors).
@@ -186,6 +243,7 @@ public sealed class WindowCapture : ICaptureSource
         // _d3dDevice (WinRT wrapper) + _item are released by the GC/CsWinRT; the actual
         // ID3D11Device is owned by the engine, which disposes it itself.
         (_d3dDevice as IDisposable)?.Dispose();
+        _frameArrived.Dispose();
     }
 
     // ── WGC/WinRT interop ────────────────────────────────────────────────────────
