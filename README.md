@@ -89,11 +89,11 @@ sends the result to the display your capture card is plugged into.
   Frames are paced with a high-resolution timer, nothing is rendered or presented while the source
   hasn't changed, and every output slot uses the **newest** source frame (no queued, stale frames →
   no extra latency). With VSync on, the display refresh paces the output and the limit is ignored.
-- 🔊 **Audio mirroring** *(optional)* — copies the Windows **default playback device** to the
-  HDMI/DP audio of the target monitor, so the capture card gets the sound too. It reacts to device
-  changes live: while the default output *is* the target monitor it pauses (with the reason shown),
-  switch the default to your headset and it starts by itself. If the target monitor's audio device
-  can't be identified, it stays off and says why.
+- 🔊 **Audio mirroring** *(optional)* — mixes the sources you tick into the HDMI/DP audio of the
+  target monitor, so the capture card gets the sound too: any output device as it sounds (e.g.
+  speakers **and** the headset Discord plays to) and input devices such as a mic, each with its own
+  gain plus a common gain per group (dB). It reacts to device changes live, never loops the target
+  back into itself, and shows what it mixes and what it skipped (and why).
 - 📊 **Capture / output FPS readout** *(optional, for verification)* — shows the capture and output
   frame rates in a corner of your choice (top/bottom, left/right). Note that it is drawn into the
   mirrored picture, so the capture card sees it as well.

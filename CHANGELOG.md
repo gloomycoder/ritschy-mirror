@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Audio mirroring: pick any number of sources.** A checkbox list in Settings (audio section) offers
+  every output device — captured as it sounds, e.g. speakers *plus* the headset Discord plays to —
+  and every input device (e.g. a microphone). "Default output/input" entries follow the Windows
+  default; the default device isn't listed twice, and a device picked both ways is captured once.
+  The target monitor's own HDMI/DP output is never offered (it would loop the mix back).
+- **Gain per source plus a common gain per group** (outputs / inputs), in dB and additive
+  (common +10 and device −5 → +5 dB). Gain changes apply instantly, without restarting the stream.
+- All sources are mixed at 48 kHz stereo (mono/multichannel and other sample rates are converted);
+  each source has its own drift control. The status line lists what is mixed and what was skipped
+  (not connected, same device as the target, no default device).
+- New config keys (live): `audio_sources` (list of `{kind, id, name, enabled, gain_db}`),
+  `audio_render_gain_db`, `audio_capture_gain_db`. Older configs keep mirroring the default output.
+
 ## v1.4.0 — frame limit, audio mirroring, FPS readout, language packs
 
 - **New: Target FPS** (`target_fps`, live). With VSync off, the mirror can be capped at a fixed

@@ -52,6 +52,12 @@ public sealed class MirrorConfig
     [JsonPropertyName("fps_overlay_position")] public string FpsOverlayPosition { get; set; } = "top_left";
     // Copy the default playback device to the target monitor's HDMI/DP audio endpoint.
     [JsonPropertyName("audio_mirror")]     public bool AudioMirror { get; set; } = false;
+    // Devices mixed into the audio mirror (checkbox list in Settings), each with its own gain.
+    // Missing in older configs → just the default output device, as before.
+    [JsonPropertyName("audio_sources")]    public List<AudioSourceConfig> AudioSources { get; set; } = AudioSourceConfig.Defaults();
+    // Group gains on top of each source's own gain: effective = group dB + device dB.
+    [JsonPropertyName("audio_render_gain_db")]  public float AudioRenderGainDb { get; set; } = 0f;
+    [JsonPropertyName("audio_capture_gain_db")] public float AudioCaptureGainDb { get; set; } = 0f;
 
     // ── Source: whole monitor OR a window (restart required) ────────
     // capture_mode: "monitor" (whole screen via Desktop Duplication, default) |
@@ -117,7 +123,8 @@ public sealed class MirrorConfig
         "tonemap_enabled", "operator", "source_peak_nits", "target_paperwhite",
         "exposure", "saturation", "contrast", "gamma", "content_offset_y", "vsync",
         "layout_mode", "crop_x", "crop_y", "crop_w", "crop_h", "show_cursor", "keep_awake",
-        "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror",
+        "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror", "audio_sources",
+        "audio_render_gain_db", "audio_capture_gain_db",
     };
     public static readonly HashSet<string> StructKeys = new(StringComparer.OrdinalIgnoreCase)
     {

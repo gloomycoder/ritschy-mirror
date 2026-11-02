@@ -15,7 +15,7 @@ namespace RitschyMirror;
 /// hideable <see cref="LogView"/> at the bottom. Inside a section body the layout is deliberately
 /// MANUAL (Location/Size, y cursor) — nested AutoSize containers collapsed to height 0.
 /// </summary>
-public sealed class SettingsForm : Form
+public sealed partial class SettingsForm : Form
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValue = "RitschyMirror";
@@ -28,7 +28,7 @@ public sealed class SettingsForm : Form
     private readonly MirrorEngine _engine;
     private readonly string _appSettingsPath;
     private readonly AppSettings _app;
-    private readonly Action _onLanguageChanged;
+    private readonly Action _rebuild;   // tray reloads the language packs and reopens this window
     private MirrorConfig _cfg;
     private bool _loading;
 
@@ -52,12 +52,12 @@ public sealed class SettingsForm : Form
 
     private const StringComparison OIC = StringComparison.OrdinalIgnoreCase;
 
-    /// <param name="onLanguageChanged">Called after the user picked another UI language
-    /// (the tray reloads the packs and rebuilds this window).</param>
-    public SettingsForm(MirrorEngine engine, string appSettingsPath, AppSettings app, Action onLanguageChanged)
+    /// <param name="rebuild">Reopens this window from scratch — after a language switch or to
+    /// re-list audio devices (the tray reloads the packs and recreates the form).</param>
+    public SettingsForm(MirrorEngine engine, string appSettingsPath, AppSettings app, Action rebuild)
     {
         _engine = engine; _appSettingsPath = appSettingsPath; _app = app;
-        _onLanguageChanged = onLanguageChanged;
+        _rebuild = rebuild;
         _cfg = MirrorConfig.Load(engine.ConfigPath);
 
         // All coordinates below are 96-dpi (100 %) layout pixels. WinForms scales locations and sizes
@@ -439,20 +439,6 @@ public sealed class SettingsForm : Form
         EndSection(s);
     }
 
-    private void BuildAudio()
-    {
-        var s = BeginSection("audio", L.T("settings.audio_mirror"), _cfg.AudioMirror, v => _cfg.AudioMirror = v);
-        Note(L.T("settings.audio_mirror.note"));
-        // Device names make this line long and it changes live → reserve room for a few wrapped
-        // lines, measured in the actual font (a fixed pixel height clips at high display scaling).
-        int statusHeight = ToLayout(TextRenderer.MeasureText("Ag", Font).Height) * StatusLines;
-        _audioStatus = new Label { Location = new Point(LX, _y), AutoSize = false, AutoEllipsis = true,
-                                   Size = new Size(NoteWidth, statusHeight) };
-        _body.Controls.Add(_audioStatus);
-        _y += statusHeight + 6;
-        EndSection(s);
-    }
-
     private void BuildCrop()
     {
         var s = BeginSection("crop", L.T("section.crop"));
@@ -493,7 +479,7 @@ public sealed class SettingsForm : Form
         {
             _app.Language = code;
             // Rebuilding this window from inside its own combo event is unsafe → defer.
-            BeginInvoke(_onLanguageChanged);
+            BeginInvoke(_rebuild);
         }, app: true);
         Note(L.T("settings.language.note"));
         CheckRow(L.T("settings.keep_awake"), _cfg.KeepAwake, v => _cfg.KeepAwake = v);

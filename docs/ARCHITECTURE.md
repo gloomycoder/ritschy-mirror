@@ -102,15 +102,26 @@ format. The rates are also in `GET /status` (`capture_fps`, `output_fps`).
 
 ## Audio mirroring
 
-`AudioMirror` (NAudio 3, WASAPI) copies the **default playback device** (role Multimedia) to the
+`AudioMirror` (NAudio 3, WASAPI) mixes the selected **sources** and plays the mix on the
 **target monitor's HDMI/DP audio endpoint**:
+
+- **Sources** (`audio_sources`) — output devices are captured in loopback (what they play), input
+  devices directly. `id: "default"` follows the Windows default (role Multimedia) of that kind.
+  Each source becomes an `AudioSourceChannel`: `WasapiRecorder` → `BufferedWaveProvider` (own drift
+  trimming) → float → stereo (`ToStereo` / `DownmixToStereoSampleProvider`) → 48 kHz
+  (`WdlResamplingSampleProvider`) → `VolumeSampleProvider` → `MixingSampleProvider` →
+  `WasapiPlayer`. Gain = group dB (`audio_render_gain_db` / `audio_capture_gain_db`) + source dB,
+  applied in place; only a change of the *set* of sources rebuilds the pipeline.
+- **Skipping** — an output source that is the target endpoint is skipped (feedback loop), a device
+  selected twice ("default" and by id) is captured once (the "default" entry and its gain win),
+  unplugged devices are reported in the status line.
 
 - **Target matching** — Windows names HDMI/DP audio endpoints after the monitor's EDID, so the
   endpoint whose device description (`PKEY_Device_DeviceDesc`) equals the target monitor's EDID name
   is the target (`AudioEndpointMatcher`). No name, no match or several matches → **unavailable**,
   with the reason shown in Settings, the dock and `GET /status → audio`.
-- **Default == target** → **paused** (the sound already plays there; mirroring it would loop it
-  back onto itself).
+- **Default == target** → if that leaves no source, **paused** (the sound already plays there;
+  mirroring it would loop it back onto itself); other sources keep being mixed.
 - **Live device changes** — an `MMDeviceNotificationClient` signals a dedicated worker thread on
   default-device change / add / remove / state change; the worker debounces (300 ms) and re-runs the
   decision, so switching the default from the HDMI monitor to a headset starts the mirror and back
@@ -189,7 +200,12 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 | `FramePacer.cs` | High-resolution waitable-timer pacing for `target_fps` |
 | `FpsCounter.cs` | Events-per-second meter (capture / output FPS) |
 | `FpsOverlay.cs` | FPS readout texture (GDI+ → immutable BGRA texture) |
-| `AudioMirror.cs` | Default playback device → target monitor HDMI/DP audio (NAudio WASAPI) |
+| `AudioMirror.cs` | Audio sources → mixer → target monitor HDMI/DP audio (NAudio WASAPI) |
+| `AudioSourceChannel.cs` | One captured device: queue, drift trim, stereo/48 kHz conversion, gain |
+| `AudioSourceConfig.cs` | `audio_sources` entry (kind, id, name, enabled, gain_db) |
+| `AudioDevices.cs` | Active input/output endpoints for the settings list |
+| `DownmixToStereoSampleProvider.cs` | Multichannel → stereo fold-down for the mixer |
+| `SettingsForm.Audio.cs` | Audio section of the settings window (device checkboxes + gains) |
 | `Localization.cs` | Language packs (`L`), `LocalizedText` for user-facing errors |
 | `Win32Window.cs` | Window + mouse-lock hook (`WH_MOUSE_LL`, on its own dedicated thread so the cursor stays smooth — the hook is never serviced on the vsync-bound render thread) |
 | `MonitorNames.cs` | Friendly EDID monitor names (CCD `QueryDisplayConfig`) |
@@ -207,7 +223,8 @@ remote controller all write the same file; the render loop reads it live.
 **Live keys** (apply immediately): `tonemap_enabled`, `operator`, `source_peak_nits`,
 `target_paperwhite`, `exposure`, `saturation`, `contrast`, `gamma`, `content_offset_y`,
 `vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`,
-`target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`.
+`target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`, `audio_sources`,
+`audio_render_gain_db`, `audio_capture_gain_db`.
 
 `tonemap_enabled`, `operator`, `source_peak_nits` and `target_paperwhite` are only in effect for
 an **HDR** source — see [Colour pipeline](#colour-pipeline--hdr-vs-sdr-source).
