@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **The settings window follows device changes live.** When Windows switches the default output or
+  input device (or one is plugged in or removed), the audio section updates by itself: only the
+  side that changed (output or input) is rebuilt, in one repaint, and the scroll position stays.
+  "↻ Refresh devices" still forces a full refresh. (The mirror itself already switched to the new
+  default device; only the window showed the old name.)
+- **Gain values can be typed.** Each gain slider has a number box next to it (dB, arrows step
+  0.5 dB); type 0 to reset.
+
 ## v1.4.10 — volume follow fixed for software-volume devices
 
 - **Fixed: volume follow applied the volume twice on some devices.** Measured: loopback already

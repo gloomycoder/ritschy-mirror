@@ -257,7 +257,8 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 | `DriftCompensator.cs` | Per-source latency control by tiny resampling-rate changes |
 | `SettingsForm.Source.cs` | Capture mode + capture target rows (list follows the mode) |
 | `SettingsForm.Scale.cs` | Scale-filter row: drop-down with per-filter notes, disabled at 1:1 |
-| `SettingsForm.Audio.cs` | Audio section of the settings window (device checkboxes + gains) |
+| `SettingsForm.Audio.cs` | Audio section of the settings window (device checkboxes + gains); rebuilds the output or input rows in place on device notifications |
+| `LoopbackVolume.cs` | Which part of an output device's volume/mute its loopback still lacks |
 | `Localization.cs` | Language packs (`L`), `LocalizedText` for user-facing errors |
 | `Win32Window.cs` | Window + mouse-lock hook (`WH_MOUSE_LL`, on its own dedicated thread so the cursor stays smooth — the hook is never serviced on the vsync-bound render thread) |
 | `MonitorNames.cs` | Friendly EDID monitor names (CCD `QueryDisplayConfig`) |
