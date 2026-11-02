@@ -207,6 +207,7 @@ public sealed class DuplicationCapture : ICaptureSource
     {
         try { _dup?.Dispose(); } catch { /* already gone — don't care */ }
         _dup = null;
+        AwaitingAccess = false;
         try
         {
             _dup = _output.DuplicateOutput1(_device, 1, new[] { Format.R16G16B16A16_Float });
@@ -215,11 +216,29 @@ public sealed class DuplicationCapture : ICaptureSource
             RefreshSourceState();
             return true;
         }
-        catch
+        catch (Exception ex)
         {
             _dup = null;
+            AwaitingAccess = IsDesktopUnavailable(ex);
             return false;
         }
+    }
+
+    public bool AwaitingAccess { get; private set; }
+
+    // Duplication can't be created while the input desktop isn't the user's: the secure desktop of a
+    // UAC prompt / the lock screen / Ctrl+Alt+Del (E_ACCESSDENIED — only LOCAL_SYSTEM may duplicate it),
+    // a disconnected session, or "not currently available". All clear up by themselves.
+    private const int E_ACCESSDENIED = unchecked((int)0x80070005);
+    private const int DXGI_ERROR_NOT_CURRENTLY_AVAILABLE = unchecked((int)0x887A0022);
+    private const int DXGI_ERROR_ACCESS_LOST = unchecked((int)0x887A0026);
+    private const int DXGI_ERROR_SESSION_DISCONNECTED = unchecked((int)0x887A0028);
+
+    private static bool IsDesktopUnavailable(Exception ex)
+    {
+        int hr = ex is SharpGenException sg ? sg.ResultCode.Code : ex.HResult;
+        return hr is E_ACCESSDENIED or DXGI_ERROR_NOT_CURRENTLY_AVAILABLE or DXGI_ERROR_ACCESS_LOST
+                  or DXGI_ERROR_SESSION_DISCONNECTED;
     }
 
     /// <summary>No-op: with monitor capture the renderer composites the cursor (separately from DXGI),

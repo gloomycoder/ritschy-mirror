@@ -57,8 +57,9 @@ public sealed class MirrorEngine
     // Capture / output frame rates of the running session (0 while stopped).
     private readonly FpsCounter _captureFps = new();
     private readonly FpsCounter _outputFps = new();
-    public double CaptureFps => IsRunning ? _captureFps.Fps : 0;
-    public double OutputFps => IsRunning ? _outputFps.Fps : 0;
+    // 0 while waiting/retrying: the counters still hold the last session's rates.
+    public double CaptureFps => IsRunning && !_waiting ? _captureFps.Fps : 0;
+    public double OutputFps => IsRunning && !_waiting ? _outputFps.Fps : 0;
 
     private volatile bool _unscaled;
     /// <summary>Running and the last frame was drawn 1:1 (scale_filter not in use); null when stopped.</summary>
@@ -94,6 +95,12 @@ public sealed class MirrorEngine
         LogWritten?.Invoke(line);
     }
 
+    /// <summary>Session-setup detail (display list, steps): skipped during the quiet slow retries.</summary>
+    private void SetupLog(string msg)
+    {
+        if (!_quietSetup) Log(msg);
+    }
+
     // ── Control ─────────────────────────────────────────────────────────────
     public void Start()
     {
@@ -112,6 +119,9 @@ public sealed class MirrorEngine
             }
             _stop = false;
             _lastError = null;
+            _quietSetup = false;
+            _waiting = false;
+            _lastWaitReason = "";
             _thread = new Thread(RenderThreadMain) { IsBackground = true, Name = "MirrorRender" };
             _thread.SetApartmentState(ApartmentState.STA);
             _thread.Start();
@@ -197,14 +207,35 @@ public sealed class MirrorEngine
     // ── Render thread ───────────────────────────────────────────────────────
     /// <summary>Outcome of a render session: stopped cleanly, lost transiently (reinit),
     /// or fatal (config/selection error — a reinit would not help).</summary>
-    private enum SessionResult { Stopped, Lost, Fatal }
+    private enum SessionResult { Stopped, Lost, Fatal, Waiting }
 
     // A session that mirrored this long without error counts as "ran healthy" → a
     // subsequent loss is transient and resets the reinit budget (only tight
-    // failure chains count toward the abort limit). Time-based, because frames are no
+    // failure chains count toward the fast-retry budget). Time-based, because frames are no
     // longer presented while the source is static or the frame limit is low.
     private const long HealthySessionMs = 5000;
-    private const int MaxConsecutiveReinit = 8;
+    private const int MaxConsecutiveReinit = 8;      // fast attempts; after that: slow, quiet, endless
+    private const int SlowReinitMs = 10_000;
+    private const int SlowReinitLogEvery = 30;       // one "still lost" line per ~5 min
+    private const int SecureDesktopRetryMs = 1000;   // DXGI: re-try the duplication while the desktop is away
+    private const int AccessWaitTickMs = 50;         // loop tick while waiting (messages, config, Stop)
+    private const int WaitForSourceMs = 1000;        // re-check a missing monitor/window (a few ms per check)
+
+    // Slow retry mode: session setup doesn't log (it would repeat ~15 lines every 10 s).
+    private volatile bool _quietSetup;
+    private string _lastQuietError = "";
+    private string _lastWaitReason = "";
+    private volatile bool _waiting;
+
+    /// <summary>Running, but not mirroring right now: waiting for a monitor/window to come back,
+    /// or retrying after a loss (<see cref="LastError"/> says which).</summary>
+    public bool IsWaiting => IsRunning && _waiting;
+
+    /// <summary>Selection errors that clear up by themselves (a monitor plugged back in, the app
+    /// started again): the engine waits for them. Everything else is a real configuration error.</summary>
+    public static bool IsWaitable(LocalizedText? error) =>
+        error?.Key is "error.source_not_connected" or "error.target_not_connected"
+                   or "error.window_not_found" or "error.no_displays";
 
     // Render-loop cadence (wall clock, independent of the frame rate).
     private const int AcquireTimeoutMs = 16;     // unpaced: wait this long for a new source frame
@@ -228,26 +259,42 @@ public sealed class MirrorEngine
                 // Hard error during setup (e.g. device/capture creation) → treat it like a
                 // loss and retry with backoff instead of killing the thread.
                 _lastError = new LocalizedText("error.raw", ex.Message);
-                Log("ERROR (render session): " + ex);
+                if (!_quietSetup) Log("ERROR (render session): " + ex);
+                else if (ex.Message != _lastQuietError) Log("ERROR (render session, retrying): " + ex.Message);
+                _lastQuietError = ex.Message;
                 result = SessionResult.Lost;
             }
 
             if (_stop || result == SessionResult.Stopped || result == SessionResult.Fatal)
                 break;
 
-            // If the session ran healthy long enough beforehand, the loss was transient → reset the budget.
-            if (healthyMs >= HealthySessionMs) consecutive = 0;
-            consecutive++;
-            if (consecutive > MaxConsecutiveReinit)
+            if (result == SessionResult.Waiting)
             {
-                _lastError = new LocalizedText("error.recovery_failed");
-                Log("ABORT: " + _lastError.English);
-                break;
+                // A missing monitor/window isn't a failure: look again until it is back (matched by its
+                // saved identity only — never another screen) or Stop(). Setup stays quiet meanwhile.
+                consecutive = 0;
+                _waiting = true;
+                _quietSetup = true;
+                InterruptibleSleep(WaitForSourceMs);
+                continue;
             }
 
-            // Exponential backoff (250 ms → max 5 s), interruptible by Stop().
-            int backoffMs = Math.Min(5000, 250 * (1 << Math.Min(consecutive - 1, 4)));
-            Log($"Mirroring lost — full reinit in {backoffMs} ms (attempt {consecutive}/{MaxConsecutiveReinit}).");
+            // If the session ran healthy long enough beforehand, the loss was transient → reset the budget.
+            if (healthyMs >= HealthySessionMs) { consecutive = 0; _quietSetup = false; _lastQuietError = ""; }
+            consecutive++;
+
+            // Never give up: the mirror runs in the background and a loss (GPU reset, mode change, a
+            // device briefly gone…) can clear up any time. Exponential backoff (250 ms → 5 s) for the
+            // first attempts, then a quiet retry every SlowReinitMs until it works or Stop().
+            bool slow = consecutive > MaxConsecutiveReinit;
+            int backoffMs = slow ? SlowReinitMs : Math.Min(5000, 250 * (1 << Math.Min(consecutive - 1, 4)));
+            if (!slow)
+                Log($"Mirroring lost — full reinit in {backoffMs} ms (attempt {consecutive}/{MaxConsecutiveReinit}).");
+            else if ((consecutive - MaxConsecutiveReinit - 1) % SlowReinitLogEvery == 0)
+                Log($"Mirroring still lost — retrying every {SlowReinitMs / 1000} s (attempt {consecutive}).");
+            if (slow) _lastError = new LocalizedText("error.retrying", SlowReinitMs / 1000);
+            _quietSetup = slow;
+            _waiting = slow;
             InterruptibleSleep(backoffMs);
         }
         Audio.SetDesired(false, "", new MirrorConfig());  // audio keeps running across a reinit, but not past the mirror
@@ -289,11 +336,31 @@ public sealed class MirrorEngine
         return false;
     }
 
+    /// <summary>
+    /// The configured monitor/window can't be used right now. Missing (unplugged, app closed) →
+    /// <see cref="SessionResult.Waiting"/>, logged once per reason; a real configuration error →
+    /// <see cref="SessionResult.Fatal"/> as before.
+    /// </summary>
+    private SessionResult SelectionFailed(LocalizedText error)
+    {
+        if (!IsWaitable(error))
+        {
+            Log("Start aborted: " + error.English);
+            _lastError = error;
+            return SessionResult.Fatal;
+        }
+        _lastError = new LocalizedText("error.waiting", error, WaitForSourceMs / 1000);
+        if (error.English != _lastWaitReason)
+            Log($"Waiting: {error.English} — checking every {WaitForSourceMs / 1000} s.");
+        _lastWaitReason = error.English;
+        return SessionResult.Waiting;
+    }
+
     private (SessionResult result, long healthyMs) RunSession()
     {
         _lastError = null;  // optimistic: a successful reinit should not leave a stale message behind
         var cfg = MirrorConfig.Load(ConfigPath);
-        Log("RitschyMirror render start.");
+        SetupLog("RitschyMirror render start.");
 
         var factory = CreateDXGIFactory2<IDXGIFactory2>(false);
 
@@ -320,10 +387,10 @@ public sealed class MirrorEngine
                 string key = MakeKey(mm.DevicePath ?? "", friendly, d.DeviceName);
                 displays.Add((ad, o6, dc.Left, dc.Top, dc.Right, dc.Bottom, hdr, $"{d.DeviceName} [{adName}]", friendly, key));
                 outp.Dispose();
-                Log($"  Display {displays.Count - 1}: {d.DeviceName} ({(friendly.Length > 0 ? friendly : "?")})  {dc.Right - dc.Left}x{dc.Bottom - dc.Top}  HDR={hdr}  [{adName}]");
+                SetupLog($"  Display {displays.Count - 1}: {d.DeviceName} ({(friendly.Length > 0 ? friendly : "?")})  {dc.Right - dc.Left}x{dc.Bottom - dc.Top}  HDR={hdr}  [{adName}]");
             }
         }
-        if (displays.Count == 0) { Log("No displays found."); _lastError = new LocalizedText("error.no_displays"); factory.Dispose(); return (SessionResult.Fatal, 0); }
+        if (displays.Count == 0) { factory.Dispose(); return (SelectionFailed(new LocalizedText("error.no_displays")), 0); }
 
         // Always resolve the target monitor via stable identity (both source modes mirror to it);
         // if the configured monitor is missing → clean abort with a plain-text message.
@@ -337,10 +404,8 @@ public sealed class MirrorEngine
         var (dstIdx, dstErr) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, isSource: false);
         if (dstErr != null)
         {
-            Log("Start aborted: " + dstErr.English);
-            _lastError = dstErr;
             CleanupEnum();
-            return (SessionResult.Fatal, 0);
+            return (SelectionFailed(dstErr), 0);
         }
         var dst = displays[dstIdx];
         string mode = cfg.ResolveOutputMode();
@@ -377,10 +442,7 @@ public sealed class MirrorEngine
                 var (hwnd, winErr) = WindowEnum.Resolve(cfg.WindowExe, cfg.WindowTitle);
                 if (winErr != null || hwnd == IntPtr.Zero)
                 {
-                    var e = winErr ?? new LocalizedText("error.no_window_selected");
-                    Log("Start aborted: " + e.English);
-                    _lastError = e;
-                    return (SessionResult.Fatal, 0);
+                    return (SelectionFailed(winErr ?? new LocalizedText("error.no_window_selected")), 0);
                 }
                 // Device on the TARGET adapter (same-adapter present); WGC delivers the window image
                 // across adapters via the DWM — exactly what makes it cross-GPU robust.
@@ -394,7 +456,7 @@ public sealed class MirrorEngine
                     foreach (var d in displays)
                         if (cx >= d.L && cx < d.R && cy >= d.T && cy < d.B) { winHdr = d.Hdr; break; }
                 }
-                Log($"Source = window '{cfg.WindowTitle}' ({cfg.WindowExe}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}, HDR={winHdr}");
+                SetupLog($"Source = window '{cfg.WindowTitle}' ({cfg.WindowExe}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}, HDR={winHdr}");
                 capture = WgcCapture.ForWindow(device, hwnd, winHdr, cfg.ShowCursor);
             }
             else
@@ -402,11 +464,7 @@ public sealed class MirrorEngine
                 // Monitor source (Desktop Duplication, duplication-bound) → device on the SOURCE adapter.
                 var (srcIdx, srcErr) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, isSource: true);
                 if (srcErr != null)
-                {
-                    Log("Start aborted: " + srcErr.English);
-                    _lastError = srcErr;
-                    return (SessionResult.Fatal, 0);
-                }
+                    return (SelectionFailed(srcErr), 0);
                 if (srcIdx == dstIdx)
                 {
                     // Mirroring a monitor onto itself only feeds the output back into the capture.
@@ -423,7 +481,7 @@ public sealed class MirrorEngine
                     D3D11CreateDevice(dst.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
                         out device, out context).CheckError();
                     var srcOutput = src.Output;
-                    Log($"Source = Display {srcIdx} ({src.Name}) via WGC, target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
+                    SetupLog($"Source = Display {srcIdx} ({src.Name}) via WGC, target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
                     capture = WgcCapture.ForMonitor(device, srcOutput.Description1.Monitor, () => IsHdr(srcOutput), cfg.ShowCursor);
                 }
                 else
@@ -431,7 +489,7 @@ public sealed class MirrorEngine
                     // DXGI Desktop Duplication is adapter-bound → device on the SOURCE adapter.
                     D3D11CreateDevice(src.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
                         out device, out context).CheckError();
-                    Log($"Source = Display {srcIdx} ({src.Name}) via DXGI, target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
+                    SetupLog($"Source = Display {srcIdx} ({src.Name}) via DXGI, target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
                     capture = new DuplicationCapture(device, src.Output);
                 }
             }
@@ -448,25 +506,25 @@ public sealed class MirrorEngine
                 x = dst.L; y = dst.T; outW = dst.R - dst.L; outH = dst.B - dst.T; borderless = true;
             }
 
-            Log("Step: creating window...");
+            SetupLog("Step: creating window...");
             window = new Win32Window("RitschyMirror", x, y, outW, outH, borderless);
-            Log("Step: renderer/swapchain...");
+            SetupLog("Step: renderer/swapchain...");
             renderer = new Renderer(factory, device, context, window.Hwnd, outW, outH, cfg.OutputBitDepth);
-            Log($"Capture {capture.Width}x{capture.Height} HDR={capture.InputIsHdr} → output {outW}x{outH} ({(cfg.OutputBitDepth >= 10 ? "10bit" : "8bit")})");
-            Log(capture.InputIsHdr
+            SetupLog($"Capture {capture.Width}x{capture.Height} HDR={capture.InputIsHdr} → output {outW}x{outH} ({(cfg.OutputBitDepth >= 10 ? "10bit" : "8bit")})");
+            SetupLog(capture.InputIsHdr
                 ? $"Source is HDR → tonemapping {(cfg.TonemapEnabled ? "active" : "OFF")} (peak {cfg.SourcePeakNits:F0} nits at white point {cfg.TargetPaperwhite:F0} nits)."
                 : "Source is SDR → 1:1 passthrough, no tonemapping (source_peak_nits/target_paperwhite have no effect here).");
 
             // Mouse lock / exclusive depending on output_mode
             if (!windowed && mode == "exclusive")
             {
-                if (renderer.TrySetExclusiveFullscreen(dst.Output)) { exclusive = true; Log("Exclusive fullscreen active."); }
-                else { Log("Exclusive not possible (cross-adapter?) → falling back to fullscreen_block."); window.EnableCursorBlock(dst.L, dst.T, dst.R, dst.B); }
+                if (renderer.TrySetExclusiveFullscreen(dst.Output)) { exclusive = true; SetupLog("Exclusive fullscreen active."); }
+                else { SetupLog("Exclusive not possible (cross-adapter?) → falling back to fullscreen_block."); window.EnableCursorBlock(dst.L, dst.T, dst.R, dst.B); }
             }
             else if (!windowed && mode == "fullscreen_block")
             {
                 window.EnableCursorBlock(dst.L, dst.T, dst.R, dst.B);
-                Log("Mouse lock active (fullscreen_block).");
+                SetupLog("Mouse lock active (fullscreen_block).");
             }
 
             // From here on we really mirror → optionally block screen/sleep (auto-release
@@ -482,11 +540,16 @@ public sealed class MirrorEngine
             _captureFps.Reset();
             _outputFps.Reset();
             Audio.SetDesired(cfg.AudioMirror, dst.Friendly, cfg);
-            LogFramePacing(cfg);
+            if (!_quietSetup) LogFramePacing(cfg);
 
             var clock = Stopwatch.StartNew();
             long nextCfgPollMs = ConfigPollMs, nextHdrPollMs = HdrPollMs;
             long lastSoakMs = 0, soakCaptured = 0, soakPresented = 0, captured = 0;
+            long accessWaitSinceMs = -1, nextAccessRetryMs = 0;   // DXGI: waiting out the secure desktop
+            if (_quietSetup) Log("Mirroring resumed — rendering again.");
+            _quietSetup = false;
+            _waiting = false;
+            _lastWaitReason = "";
             bool dirty = true;  // something other than a new source frame needs a redraw
             bool overlayFailed = false;
             long presented = 0;
@@ -542,6 +605,30 @@ public sealed class MirrorEngine
                     lastSoakMs = nowMs; soakCaptured = captured; soakPresented = presented;
                 }
 
+                // Secure desktop (UAC / lock screen): keep window + device, show the last frame and
+                // re-try the duplication once a second — back within a second of the desktop returning.
+                if (accessWaitSinceMs >= 0)
+                {
+                    if (nowMs >= nextAccessRetryMs)
+                    {
+                        if (capture.Recover())
+                        {
+                            Log($"Capture resumed after {(nowMs - accessWaitSinceMs) / 1000.0:0.0} s (desktop accessible again).");
+                            accessWaitSinceMs = -1;
+                            pacer.Reset();
+                            dirty = true;
+                        }
+                        else if (!capture.AwaitingAccess)
+                        {
+                            Log("Capture source still unavailable (not the secure desktop) → full reinit of the render chain.");
+                            sessionResult = SessionResult.Lost;
+                            break;
+                        }
+                        else nextAccessRetryMs = nowMs + SecureDesktopRetryMs;
+                    }
+                    if (accessWaitSinceMs >= 0) { Thread.Sleep(AccessWaitTickMs); continue; }
+                }
+
                 // Frame pacing. VSync on or no limit: block until the source delivers a new frame (or
                 // the timeout). target_fps with VSync off: sleep until the next slot, THEN take whatever
                 // is newest — the capture keeps only the latest image, so a slot never shows a stale frame.
@@ -565,6 +652,13 @@ public sealed class MirrorEngine
                     Log("Capture source lost (" + ex.Message + ") → re-initializing.");
                     if (!TryRecoverCapture(capture))
                     {
+                        if (capture.AwaitingAccess)
+                        {
+                            Log($"Capture paused: desktop not accessible (UAC prompt / lock screen?) — retrying every {SecureDesktopRetryMs / 1000} s, last frame stays on screen.");
+                            accessWaitSinceMs = nowMs;
+                            nextAccessRetryMs = nowMs + SecureDesktopRetryMs;
+                            continue;
+                        }
                         // If it stays dead (e.g. device lost, cross-adapter) → do NOT keep spinning,
                         // abort the session instead → the supervisor rebuilds the whole chain.
                         Log("Duplication recovery failed → full reinit of the render chain.");

@@ -22,12 +22,18 @@ internal static class Program
         // a single-file publish bundles them and never raises this event.
         AssemblyLoadContext.Default.Resolving += ResolveFromBin;
 
-        // Single instance: if a copy is already running, we only ask it to open the settings
-        // and exit. Prevents duplicate tray icons + agent port conflicts.
+        // Single instance: prevents duplicate tray icons, two mirrors and agent port conflicts. A second
+        // start says so and exits; the "Settings" shortcut (--settings) instead opens the running
+        // copy's settings window, without a message.
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
         if (!createdNew)
         {
-            try { EventWaitHandle.OpenExisting(ShowSettingsEvent).Set(); } catch { }
+            bool settingsShortcut = Array.Exists(Environment.GetCommandLineArgs(),
+                a => string.Equals(a, "--settings", StringComparison.OrdinalIgnoreCase));
+            if (settingsShortcut)
+                try { EventWaitHandle.OpenExisting(ShowSettingsEvent).Set(); } catch { }
+            else
+                ShowAlreadyRunning();
             return;
         }
 
@@ -39,6 +45,16 @@ internal static class Program
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new TrayContext(Environment.GetCommandLineArgs()));
         GC.KeepAlive(mutex);  // keep the mutex alive until app exit
+    }
+
+    /// <summary>"Already running" notice in the user's UI language (built-in English if the packs
+    /// or the settings can't be read).</summary>
+    private static void ShowAlreadyRunning()
+    {
+        try { L.Init(AppPaths.Base, AppSettings.Load(AppPaths.AppSettings).Language); }
+        catch (Exception) { /* keep the built-in English text */ }
+        Application.EnableVisualStyles();
+        MessageBox.Show(L.T("app.already_running"), "RitschyMirror", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private static Assembly? ResolveFromBin(AssemblyLoadContext context, AssemblyName name)

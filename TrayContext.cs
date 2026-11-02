@@ -96,7 +96,7 @@ public sealed class TrayContext : ApplicationContext
         if (_app.AutostartMirror)
         {
             var err = _engine.Preflight();
-            if (err == null) _engine.Start();
+            if (err == null || MirrorEngine.IsWaitable(err)) _engine.Start();   // the engine waits for it
             else _engine.Log("Autostart mirror skipped: " + err.English);
         }
 
@@ -146,12 +146,13 @@ public sealed class TrayContext : ApplicationContext
         else
         {
             var err = _engine.Preflight();
-            if (err != null)
+            if (err != null && !MirrorEngine.IsWaitable(err))
             {
                 _tray.ShowBalloonTip(4000, "RitschyMirror", err.Text + ".", ToolTipIcon.Warning);
                 RefreshUi();
                 return;
             }
+            if (err != null) _tray.ShowBalloonTip(4000, "RitschyMirror", L.T("info.start_waiting", err), ToolTipIcon.Info);
             _engine.Start();
         }
         RefreshUi();
@@ -200,7 +201,8 @@ public sealed class TrayContext : ApplicationContext
         bool running = _engine.IsRunning;
         _toggleItem.Text = L.T(running ? "tray.stop" : "tray.start");
         string bind = _agent?.BoundPrefix ?? L.T("tray.agent_off");
-        string text = $"RitschyMirror — {L.T(running ? "tray.state.running" : "tray.state.idle")}\n{bind}";
+        string state = !running ? "tray.state.idle" : _engine.IsWaiting ? "tray.state.waiting" : "tray.state.running";
+        string text = $"RitschyMirror — {L.T(state)}\n{bind}";
         _tray.Text = text.Length <= MaxTrayTextLength ? text : text[..MaxTrayTextLength];
         if (_lastRunning != running)  // swap the green/red tray icon only on a status change
         {

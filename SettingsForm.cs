@@ -135,11 +135,13 @@ public sealed partial class SettingsForm : Form
     private void StartWithCheck()
     {
         var err = _engine.Preflight();
-        if (err != null)
+        if (err != null && !MirrorEngine.IsWaitable(err))
         {
             MessageBox.Show(this, err.Text + ".", "RitschyMirror", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
+        // Missing monitor/window: start anyway — the engine waits and mirrors once it is there.
+        if (err != null) MessageBox.Show(this, L.T("info.start_waiting", err), "RitschyMirror", MessageBoxButtons.OK, MessageBoxIcon.Information);
         _engine.Start();
     }
 
@@ -211,7 +213,9 @@ public sealed partial class SettingsForm : Form
             : LabelOf(_cfg.SourceKey, _cfg.SourceLabel) + (_cfg.ResolveMonitorApi() == "wgc" ? " (WGC)" : "");
         string dst = LabelOf(_cfg.TargetKey, _cfg.TargetLabel);
         string pair = src.Length > 0 || dst.Length > 0 ? $"  ·  {src} → {dst}" : "";
-        SetSummary("mirroring", L.T(running ? "summary.running" : "summary.stopped") + pair);
+        string state = !running ? L.T("summary.stopped")
+            : _engine.IsWaiting && _engine.LastError.Length > 0 ? _engine.LastError : L.T("summary.running");
+        SetSummary("mirroring", state + pair);
 
         SetSummary("tonemap", _cfg.TonemapEnabled ? _cfg.Operator : "");
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Mirroring never gives up.** It used to stop after 8 failed reinits; now it keeps retrying
+  (fast at first, then every 10 s, with a quiet log) until it works or you stop it.
+- **DXGI survives UAC prompts and the lock screen.** These switch to the secure desktop, which
+  DXGI can't capture — after ~25 s the mirror used to stop. It now keeps the last frame on screen,
+  re-tries once a second and continues within a second of the desktop returning.
+- **Waits for a missing monitor or window** instead of stopping: "not connected" / "window not
+  found" are re-checked every second, and mirroring continues as soon as that exact monitor or
+  window is back (status: "waiting"). Starting while it is missing starts anyway, with a note.
+  Real setup errors (nothing selected, same monitor, primary as output) still stop with a message.
+- **One instance only, and it says so:** starting the app a second time shows "already running"
+  and exits (the "Settings" shortcut still just opens the running copy's settings).
+
 ## v1.4.11 — settings follow audio device changes live, typed gain values
 
 - **The settings window follows device changes live.** When Windows switches the default output or

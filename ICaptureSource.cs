@@ -55,6 +55,12 @@ public interface ICaptureSource : IDisposable
     /// on a half-dead resource).</summary>
     bool Recover();
 
+    /// <summary>True after a failed <see cref="Recover"/> whose only cause is that the desktop can't be
+    /// captured right now — the secure desktop (UAC prompt, lock screen, Ctrl+Alt+Del) or a
+    /// disconnected session. Nothing is broken: the session keeps its window and device and simply
+    /// calls <see cref="Recover"/> again later. False = a real failure (full reinit).</summary>
+    bool AwaitingAccess { get; }
+
     /// <summary>Apply live config (hot reload) to the source as far as it takes effect source-side.
     /// Example: window capture toggles the WGC session's cursor capture live. Sources without
     /// such state (monitor capture: the renderer handles the cursor) implement this as a no-op.</summary>

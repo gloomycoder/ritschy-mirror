@@ -208,11 +208,24 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
    the device itself was lost), the session is abandoned and the **whole render chain is rebuilt**
    (DXGI factory → adapter/output enumeration → device → window → renderer → capture) on a fresh
    `RunSession()`. Reinit uses **exponential back-off** (250 ms → 5 s, interruptible by `Stop()`)
-   and a **retry cap** (`MaxConsecutiveReinit`); a session that ran healthy for a while
-   (`HealthyFrameThreshold` frames) resets the budget, so only tight failure chains count toward
-   the cap. If recovery genuinely fails, the engine stops cleanly with `LastError` set rather than
-   hanging. Config-/selection errors (no displays, configured monitor unplugged) are terminal
-   (`SessionResult.Fatal`) and are *not* retried — they surface their exact message instead.
+   for `MaxConsecutiveReinit` attempts, then keeps retrying every `SlowReinitMs` (10 s) **without
+   giving up** — the mirror runs in the background. Slow retries skip the session-setup log and
+   write one "still lost" line per ~5 min; a session that ran healthy for 5 s resets the budget.
+
+**Secure desktop (DXGI).** A UAC prompt, the lock screen or Ctrl+Alt+Del switch to the Winlogon
+desktop, which only LOCAL_SYSTEM may duplicate: the duplication is lost and can't be re-created
+(`E_ACCESSDENIED`; also session-disconnected / not-currently-available). `DuplicationCapture`
+reports that as `AwaitingAccess`; the render loop then keeps window and device, leaves the last
+frame on screen and re-tries the duplication every `SecureDesktopRetryMs` (1 s) — back within a
+second of the desktop returning, no reinit, no window flicker. WGC keeps delivering across it.
+
+**Missing monitor / window.** "Configured monitor not connected", "window not found" and "no
+displays" (`MirrorEngine.IsWaitable`) are not failures: the session returns
+`SessionResult.Waiting`, the supervisor looks again every `WaitForSourceMs` (1 s, a few ms per
+check) until it is back — matched by its saved identity only, never another screen — and the UI
+shows "waiting". Manual start and autostart start anyway in that case. Real configuration errors
+(nothing selected, capture = output monitor, output on the primary monitor) still stop at once
+(`SessionResult.Fatal`) with their message.
 3. **Window-procedure lifetime (`Win32Window`)** — the window class is registered **once per
    process** against a **static** window procedure held in a `static` field (rooted for the whole
    process), dispatching to the live instance by `HWND`. This closes a separate rare crash: an
@@ -233,7 +246,7 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 
 | File | Purpose |
 |---|---|
-| `Program.cs` | Entry point → tray app |
+| `Program.cs` | Entry point → tray app; single instance (a second start says "already running", `--settings` opens the running copy's settings) |
 | `TrayContext.cs` | NotifyIcon + menu, owns the engine + HTTP agent |
 | `SettingsForm.cs` | Local settings GUI (all parameters), one collapsible section per feature |
 | `CollapsibleSection.cs` | Section control: header (on/off toggle + live summary) + collapsible body |
