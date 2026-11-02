@@ -26,6 +26,7 @@ internal sealed class DriftCompensator : ISampleProvider
     private const double Smoothing = 0.05;        // EMA weight per read (~every 10 ms)
     private const int MinReadFrames = 256;         // upstream read granularity
     private const double MaxPrimeWaitMs = TargetLatencyMs;   // start anyway after this long
+    private const int LookAheadFrames = 3;                    // Hermite needs i0-1 … i0+2
 
     private readonly ISampleProvider _source;
     private readonly BufferedWaveProvider _queue;
@@ -33,6 +34,7 @@ internal sealed class DriftCompensator : ISampleProvider
 
     private float[] _in = Array.Empty<float>();   // interleaved input window
     private int _inFrames;                        // valid frames in _in
+    private int _realEnd;                         // frames before this index are real audio (rest: padding)
     private double _pos;                          // read position in _in (frames)
     private bool _priming = true;
     private double _primeWaitMs;                  // time spent priming since data arrived
@@ -65,25 +67,25 @@ internal sealed class DriftCompensator : ISampleProvider
             if (queuedMs < TargetLatencyMs && _primeWaitMs < MaxPrimeWaitMs) { buffer.Clear(); return buffer.Length; }
             _priming = false;
             _primeWaitMs = 0;
-            _inFrames = 0; _pos = 1;   // fresh start: one frame of history is primed below
+            _inFrames = 0; _realEnd = 0; _pos = 1;   // fresh start: one frame of history is primed below
             _avgMs = queuedMs;
         }
 
-        // Fewer samples queued than this read needs → the source stopped (or stalled): play out what
-        // is left — the queue pads the rest with silence — and re-prime for the next sound.
-        bool draining = queuedMs < neededMs;
-        double ratio = 1.0;
-        if (!draining)
-        {
-            _avgMs += Smoothing * (queuedMs - _avgMs);
-            ratio = 1.0 + Math.Clamp((_avgMs - TargetLatencyMs) * RatioPerMs, -MaxRatioDeviation, MaxRatioDeviation);
-        }
+        _avgMs += Smoothing * (queuedMs - _avgMs);
+        double ratio = 1.0 + Math.Clamp((_avgMs - TargetLatencyMs) * RatioPerMs, -MaxRatioDeviation, MaxRatioDeviation);
+
+        // Real audio left = still queued + already read into the window but not played yet. If that
+        // doesn't cover this read (plus the interpolator's look-ahead), the source stopped or stalled:
+        // play ALL of it out — padded with silence — then re-prime for the next sound.
+        double realLeft = QueuedFrames() + Math.Max(0, _realEnd - _pos);
+        bool draining = realLeft < outFrames * ratio + LookAheadFrames;
+        if (draining) ratio = 1.0;
         Ratio = ratio;
 
         for (int f = 0; f < outFrames; f++)
         {
             // EnsureFrames may slide the window (and _pos) — take the index afterwards.
-            if (!EnsureFrames((int)_pos + 3)) { buffer.Slice(f * _channels).Clear(); break; }
+            if (!EnsureFrames((int)_pos + LookAheadFrames, allowPadding: draining)) { buffer.Slice(f * _channels).Clear(); break; }
             int i0 = (int)_pos;
             float t = (float)(_pos - i0);
             for (int c = 0; c < _channels; c++)
@@ -94,18 +96,26 @@ internal sealed class DriftCompensator : ISampleProvider
             }
             _pos += ratio;
         }
-        if (draining) _priming = true;
+        if (draining && _pos >= _realEnd) _priming = true;   // every real sample has been played
         return buffer.Length;
     }
 
-    /// <summary>Make frames [0, count) available, sliding the window (keeps one frame of history).</summary>
-    private bool EnsureFrames(int count)
+    /// <summary>Whole frames waiting in the capture queue (same frame count as the converted stream).</summary>
+    private int QueuedFrames() => _queue.BufferedBytes / _queue.WaveFormat.BlockAlign;
+
+    /// <summary>
+    /// Make frames [0, count) available, sliding the window (keeps one frame of history). Normally
+    /// reads only what the queue really holds — the queue would pad a short read with zeros, i.e. a
+    /// gap in the middle of the sound. <paramref name="allowPadding"/> (draining) reads past the end.
+    /// </summary>
+    private bool EnsureFrames(int count, bool allowPadding)
     {
         if (count <= _inFrames) return true;
         int keepFrom = Math.Min(Math.Max(0, (int)_pos - 1), _inFrames);
         int keep = _inFrames - keepFrom;
         if (keepFrom > 0 && keep > 0) Array.Copy(_in, keepFrom * _channels, _in, 0, keep * _channels);
         _inFrames = keep;
+        _realEnd = Math.Max(0, _realEnd - keepFrom);
         _pos -= keepFrom;
         count -= keepFrom;
         if (_inFrames == 0)
@@ -114,11 +124,16 @@ internal sealed class DriftCompensator : ISampleProvider
             EnsureCapacity(1);
             Array.Clear(_in, 0, _channels);
             _inFrames = 1;
+            _realEnd = 1;
         }
 
+        int queued = QueuedFrames();
         int want = Math.Max(count - _inFrames, MinReadFrames);
+        if (!allowPadding) want = Math.Min(want, queued);
+        if (want <= 0) return count <= _inFrames;
         EnsureCapacity(_inFrames + want);
         int got = _source.Read(_in.AsSpan(_inFrames * _channels, want * _channels)) / _channels;
+        if (_realEnd == _inFrames) _realEnd += Math.Min(got, queued);   // real audio is contiguous
         _inFrames += got;
         return count <= _inFrames;
     }

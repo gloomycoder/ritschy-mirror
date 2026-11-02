@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed: the end of a short sound could be cut off** (e.g. the last millisecond of a 31–41 ms
+  sound). The compensator decided a source had stopped by looking only at the capture queue, not
+  at audio it had already read ahead, and dropped that rest. It now tracks how much real audio it
+  holds, plays all of it before re-priming, and no longer pads a short read with silence in the
+  middle of a sound.
+
 ## v1.4.6 — short sounds no longer stuck in the audio mirror
 
 - **Fixed: short sounds could get stuck in the audio mirror.** After silence a source waited for
