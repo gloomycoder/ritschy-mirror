@@ -194,6 +194,45 @@ log\      mirror_<날짜>_<시간>.log — 앱을 실행할 때마다 새 파일
 
 ---
 
+## 성능과 게임 영향
+
+**게임이 떠 있는 모니터를 미러링하면 게임이 느려지거나 입력 지연이 생기나요?** 측정해 본 결과
+그렇지 않았습니다. 화면을 꽉 채운 게임(테두리 없는 창, 전체 화면)은 보통 *Independent Flip*으로
+출력됩니다. 데스크톱 합성기(DWM)를 거치지 않고 GPU가 게임 화면을 모니터로 바로 내보내는 경로입니다.
+화면 캡처를 하면 Windows가 그 모니터를 합성 경로(*Composed: Flip*)로 돌릴 수 있다는 우려가 있습니다.
+그렇게 되면 화면 지연이 최대 한 주사 주기만큼 늘고, 티어링이나 VRR이 꺼집니다.
+[PresentMon](https://github.com/GameTechDev/PresentMon)으로 각 10초씩 확인했습니다.
+
+| 미러링 | 출력 경로 (전체 프레임) | FPS | 화면 표시까지 (평균 / 상위 5%) | GPU 사용 |
+|---|---|---|---|---|
+| 끔 | Hardware: Independent Flip | 59.9 | 49.5 / 56.1 ms | 4.1 ms |
+| DXGI | Hardware: Independent Flip | 59.9 | 49.3 / 55.9 ms | 4.1 ms |
+| WGC | Hardware: Independent Flip | 60.0 | 49.6 / 56.2 ms | 4.0 ms |
+| 다시 끔 | Hardware: Independent Flip | 59.9 | 49.1 / 56.0 ms | 4.5 ms |
+
+*환경: Windows 11, RTX 4080, Ryzen Threadripper PRO 5945WX. 게임: 온라인 RPG(DX11), 1920×1080 60Hz 모니터에서
+테두리 없는 창, VSync 켬. 미러는 그 모니터를 다른 모니터로 60fps로 내보냈습니다.*
+
+- 게임은 측정 내내 빠른 경로를 유지했고, 지연과 GPU 시간 차이는 측정 오차 수준입니다.
+- 미러 자체의 부하는 게임 fps가 아니라 **미러의** fps와 출력 해상도에 비례합니다. `target_fps`를
+  쓰면 주기마다 최신 프레임 하나만 가져오므로, 게임이 200fps여도 초당 60번만 읽습니다. 화면에
+  변화가 없으면 다시 그리지도 않습니다. 메모리는 장시간 실행에서 약 120~140MB입니다(soak 로그 기준).
+- 여기서 측정하지 않은 조건: VSync 끔 / 프레임 제한 해제, 구식 독점 전체 화면. 드라이버나 Windows
+  업데이트로 바뀔 수도 있으니, 직접 1분이면 확인할 수 있습니다.
+
+```bat
+PresentMon-x64.exe --process_name YourGame.exe --output_file pm.csv --timed 10 --terminate_after_timed
+```
+
+미러링을 끈 상태와 켠 상태의 `PresentMode` 열을 비교하세요. 두 경우 모두 `Hardware: Independent
+Flip`(또는 `Hardware: Legacy Flip`)이면 영향이 없는 것입니다. 미러링할 때만 `Composed: Flip`이면
+캡처 때문에 게임이 합성 경로로 바뀐 것이니, 다른 캡처 방식으로 바꾸거나 NVIDIA 제어판에서
+"창 모드 G-SYNC"를 켜보세요.
+
+팁: DX10/11 게임은 테두리 없는 창에 Windows 11의 *창 모드 게임 최적화*를 켜면 빠른 경로로 출력됩니다.
+일반 창 모드(테두리 있음)는 미러링과 관계없이 원래 합성 경로입니다. 미러 창은 출력 모니터에 떠 있어서
+게임 화면과 겹치지 않습니다.
+
 ## 소스에서 빌드
 
 **.NET 9 SDK**가 필요합니다(설치 프로그램을 만들려면 **[Inno Setup 6](https://jrsoftware.org/isinfo.php)**도 필요).

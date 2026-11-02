@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Docs: new README section **Performance & game impact** — PresentMon measurement showing that DXGI
+  and WGC capture keep a borderless game in Independent Flip (no added latency), how the mirror's
+  cost scales, and how to check your own setup.
+
 ## v1.4.12 — mirroring never gives up: survives UAC, waits for missing monitors
 
 - **Mirroring never gives up.** It used to stop after 8 failed reinits; now it keeps retrying

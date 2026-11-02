@@ -212,6 +212,10 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
    giving up** — the mirror runs in the background. Slow retries skip the session-setup log and
    write one "still lost" line per ~5 min; a session that ran healthy for 5 s resets the budget.
 
+**Effect on the captured game.** Measured with PresentMon (README, "Performance & game impact"): a
+borderless DX11 game on the captured monitor stayed in `Hardware: Independent Flip` with DXGI and
+WGC capture running — the capture does not force that monitor into DWM composition here.
+
 **Secure desktop (DXGI).** A UAC prompt, the lock screen or Ctrl+Alt+Del switch to the Winlogon
 desktop, which only LOCAL_SYSTEM may duplicate: the duplication is lost and can't be re-created
 (`E_ACCESSDENIED`; also session-disconnected / not-currently-available). `DuplicationCapture`

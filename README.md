@@ -195,6 +195,44 @@ API, and how the rendering pipeline works internally.
 
 ---
 
+## Performance & game impact
+
+**Does mirroring the monitor a game runs on slow the game down or add input lag?** Not in our
+measurement. A game that covers its monitor (borderless or fullscreen) normally presents in
+*Independent Flip* — the GPU scans its frames out directly, without the desktop compositor (DWM).
+The worry with screen capture is that Windows falls back to composing that monitor (*Composed:
+Flip*), which adds up to one refresh of display latency and drops tearing / VRR. We checked that
+with [PresentMon](https://github.com/GameTechDev/PresentMon), 10 s per run:
+
+| Mirror | Present mode (all frames) | FPS | Until displayed (avg / p95) | GPU busy |
+|---|---|---|---|---|
+| off | Hardware: Independent Flip | 59.9 | 49.5 / 56.1 ms | 4.1 ms |
+| DXGI | Hardware: Independent Flip | 59.9 | 49.3 / 55.9 ms | 4.1 ms |
+| WGC | Hardware: Independent Flip | 60.0 | 49.6 / 56.2 ms | 4.0 ms |
+| off again | Hardware: Independent Flip | 59.9 | 49.1 / 56.0 ms | 4.5 ms |
+
+*Setup: Windows 11, RTX 4080, Ryzen Threadripper PRO 5945WX. Game: an online RPG (DX11), borderless on a
+1920×1080 60 Hz monitor, VSync on. The mirror captured that monitor to a second monitor at 60 fps.*
+
+- The game stayed on the direct path the whole time; latency and GPU time are within run-to-run noise.
+- The mirror's own cost scales with **its** frame rate and output size, not the game's: with
+  `target_fps` it takes only the newest frame each slot, so a 200 fps game is still read 60×/s.
+  Idle sources aren't re-rendered at all. Memory: ~120–140 MB in long runs (soak log).
+- Not measured here: VSync off / uncapped frame rates and legacy exclusive fullscreen. A driver or
+  Windows update can change this — check your own setup in a minute:
+
+```bat
+PresentMon-x64.exe --process_name YourGame.exe --output_file pm.csv --timed 10 --terminate_after_timed
+```
+
+Look at the `PresentMode` column with the mirror off and on. `Hardware: Independent Flip` (or
+`Hardware: Legacy Flip`) both times = no impact; `Composed: Flip` only while mirroring = the capture
+pushed the game into composition (try the other capture API, or enable G-SYNC for windowed mode).
+
+Tips: borderless + Windows 11 *Optimizations for windowed games* gives DX10/11 games the direct path;
+a normal (bordered) window is composed anyway, mirroring or not. The mirror window sits on the
+output monitor, so it never overlaps the game.
+
 ## Build from source
 
 Requires the **.NET 9 SDK** (and, for the installer, **[Inno Setup 6](https://jrsoftware.org/isinfo.php)**).
