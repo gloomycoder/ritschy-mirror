@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.6 — short sounds no longer stuck in the audio mirror
 
 - **Fixed: short sounds could get stuck in the audio mirror.** After silence a source waited for
   40 ms of audio before playing; a short sound (a click) followed by silence never reached that, so

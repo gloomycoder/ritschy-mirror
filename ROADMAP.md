@@ -1,5 +1,9 @@
 # Roadmap
 
+## Done in v1.4.6 ✓
+
+- **Audio priming fix** — short sounds after silence play out instead of staying queued.
+
 ## Done in v1.4.5 ✓
 
 - **Simpler capture setup** — one capture mode (Monitor DXGI / Monitor WGC / Window WGC) and one
