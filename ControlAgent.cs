@@ -202,6 +202,7 @@ public sealed class ControlAgent
             ["error"] = string.IsNullOrEmpty(_engine.LastError) ? null : _engine.LastError,
             ["capture_fps"] = Math.Round(_engine.CaptureFps, 1),
             ["output_fps"] = Math.Round(_engine.OutputFps, 1),
+            ["scale_unscaled"] = _engine.OutputUnscaled,
             ["audio"] = new JsonObject
             {
                 ["state"] = _engine.Audio.State.ToString().ToLowerInvariant(),

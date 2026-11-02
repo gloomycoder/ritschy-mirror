@@ -66,6 +66,9 @@ sends the result to the display your capture card is plugged into.
   - `stretch` — fill the frame (ignore aspect)
   - `top_strip` — source on top, black bar below (e.g. fit 21:9 content into a 16:9 frame)
   - `crop_region` — mirror a freely defined rectangle of the source
+- 🔍 **Scale filter** — Bilinear, Area, Bicubic (Mitchell / Catmull-Rom) or Lanczos 2/3 when the
+  source has to be shrunk (or enlarged): Area and Lanczos keep thin lines and small text clean
+  instead of shimmering. At 1:1 nothing is filtered.
 - 🖥️ **Output modes**:
   - `windowed` — a normal test window
   - `borderless` — borderless fullscreen on the target display

@@ -11,6 +11,15 @@ swap chain** (8- or 10-bit). The render device is created on the **source adapte
 (Desktop Duplication is adapter-bound); when the target display hangs off a
 different GPU, the DWM performs the cross-adapter transfer in borderless mode.
 
+**Scaling** (`scale_filter`): `bilinear` is one hardware-filtered sample per output pixel
+(`PSMain`). The quality filters (`area`, `bicubic` = Mitchell, `catmull_rom`, `lanczos2`,
+`lanczos3`) run two passes in linear light — `PSResampleH` filters along x from the source into an
+FP16 intermediate (output width × crop rows), `PSResampleV` filters along y and grades
+(`Grade()` is shared with `PSMain`). Kernels are widened by the shrink factor (area: exact texel
+overlap), negative lobes are clamped before grading, taps are capped at 128 per pass. The viewport
+is snapped to whole pixels; if the crop already has the viewport's size (`Renderer.IsUnscaled`,
+also used by the settings window) the frame is drawn 1:1 and no filter runs.
+
 Per-Monitor-V2 DPI awareness is set programmatically (`SetProcessDpiAwarenessContext`),
 so capture/display geometry is in real pixels and not distorted by Windows scaling.
 
@@ -205,6 +214,7 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 | `AudioSourceConfig.cs` | `audio_sources` entry (kind, id, name, enabled, gain_db) |
 | `AudioDevices.cs` | Active input/output endpoints for the settings list |
 | `DownmixToStereoSampleProvider.cs` | Multichannel → stereo fold-down for the mixer |
+| `SettingsForm.Scale.cs` | Scale-filter row: drop-down with per-filter notes, disabled at 1:1 |
 | `SettingsForm.Audio.cs` | Audio section of the settings window (device checkboxes + gains) |
 | `Localization.cs` | Language packs (`L`), `LocalizedText` for user-facing errors |
 | `Win32Window.cs` | Window + mouse-lock hook (`WH_MOUSE_LL`, on its own dedicated thread so the cursor stays smooth — the hook is never serviced on the vsync-bound render thread) |
@@ -224,7 +234,7 @@ remote controller all write the same file; the render loop reads it live.
 `target_paperwhite`, `exposure`, `saturation`, `contrast`, `gamma`, `content_offset_y`,
 `vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`,
 `target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`, `audio_sources`,
-`audio_render_gain_db`, `audio_capture_gain_db`.
+`audio_render_gain_db`, `audio_capture_gain_db`, `scale_filter`.
 
 `tonemap_enabled`, `operator`, `source_peak_nits` and `target_paperwhite` are only in effect for
 an **HDR** source — see [Colour pipeline](#colour-pipeline--hdr-vs-sdr-source).

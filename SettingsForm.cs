@@ -111,7 +111,7 @@ public sealed partial class SettingsForm : Form
         var update = new Button { Text = L.T("settings.btn.check_updates"), Location = new Point(386, 9), Width = 170, Height = 30 };
         update.Click += (_, _) => CheckForUpdates(update);
         _logButton = new Button { Location = new Point(564, 9), Width = 100, Height = 30 };
-        _logButton.Click += (_, _) => SetLogVisible(!_logView.Visible);
+        _logButton.Click += (_, _) => SetLogVisible(!_app.UiShowLog);
         bottom.Controls.AddRange(new Control[] { start, restart, close, update, _logButton });
         UpdateLogButton();
 
@@ -169,8 +169,9 @@ public sealed partial class SettingsForm : Form
         UpdateLogButton();
     }
 
+    // From the setting, not _logView.Visible: a child reports Visible=false until the form is shown.
     private void UpdateLogButton() =>
-        _logButton.Text = L.T(_logView.Visible ? "settings.btn.log_hide" : "settings.btn.log_show");
+        _logButton.Text = L.T(_app.UiShowLog ? "settings.btn.log_hide" : "settings.btn.log_show");
 
     // ── Sections ───────────────────────────────────────────────────────────
     /// <summary>Start a feature section; the row helpers below add to its body until
@@ -204,6 +205,7 @@ public sealed partial class SettingsForm : Form
     {
         if (IsDisposed || _byId.Count == 0) return;
         bool running = _engine.IsRunning;
+        UpdateFilterAvailability();   // any source/target/layout/size change can make it 1:1
 
         string src = _cfg.ResolveCaptureMode() == "window"
             ? (string.IsNullOrWhiteSpace(_cfg.WindowTitle) ? "window" : _cfg.WindowTitle)
@@ -387,6 +389,7 @@ public sealed partial class SettingsForm : Form
             Note(L.T("settings.target_missing", LabelOf(_cfg.TargetKey, _cfg.TargetLabel)));
 
         ComboRow(L.T("settings.layout_mode"), new[] { "fit", "stretch", "top_strip", "crop_region" }, _cfg.LayoutMode, v => _cfg.LayoutMode = v);
+        BuildScaleFilterRow();
         NumRow(L.T("settings.offset_y"), -2160, 2160, _cfg.ContentOffsetY, 2, 0, v => _cfg.ContentOffsetY = (int)v);
         ComboRow(L.T("settings.output_mode"), new[] { "windowed", "borderless", "fullscreen_block", "exclusive" }, _cfg.ResolveOutputMode(), v => _cfg.OutputMode = v);
         ComboRow(L.T("settings.bit_depth"), new[] { "8", "10" }, _cfg.OutputBitDepth.ToString(), v => _cfg.OutputBitDepth = int.TryParse(v, out var b) ? b : 10);

@@ -39,6 +39,9 @@ public sealed class MirrorConfig
     // Composite the mouse cursor into the output (Desktop Duplication delivers it separately).
     [JsonPropertyName("show_cursor")]      public bool ShowCursor { get; set; } = false;
     [JsonPropertyName("vsync")]            public bool Vsync { get; set; } = true;
+    // Resampling when source crop and output differ in size (1:1 is never filtered):
+    // "bilinear" (default, 1 pass) | "area" | "bicubic" (Mitchell) | "catmull_rom" | "lanczos2" | "lanczos3".
+    [JsonPropertyName("scale_filter")]     public string ScaleFilter { get; set; } = "bilinear";
     // Prevent sleep + monitor power-off while mirroring (like a video player).
     // On by default; can be toggled live (takes effect immediately on the running mirror).
     [JsonPropertyName("keep_awake")]       public bool KeepAwake { get; set; } = true;
@@ -108,6 +111,20 @@ public sealed class MirrorConfig
     }
 
     public const int MinTargetFps = 1, MaxTargetFps = 1000;
+
+    /// <summary>scale_filter values in UI order; the id is the shader's FilterId.</summary>
+    public static readonly string[] ScaleFilters = { "bilinear", "area", "bicubic", "catmull_rom", "lanczos2", "lanczos3" };
+    public const int BilinearFilterId = 1;
+
+    public int ScaleFilterId => (ScaleFilter ?? "").Trim().ToLowerInvariant() switch
+    {
+        "area"        => 2,
+        "bicubic"     => 3,
+        "catmull_rom" => 4,
+        "lanczos2"    => 5,
+        "lanczos3"    => 6,
+        _             => BilinearFilterId,
+    };
     public static readonly string[] OverlayPositions = { "top_left", "top_right", "bottom_left", "bottom_right" };
 
     /// <summary>Frame limit actually in effect: only with VSync off (0 = unlimited / VSync paces).</summary>
@@ -123,7 +140,7 @@ public sealed class MirrorConfig
         "tonemap_enabled", "operator", "source_peak_nits", "target_paperwhite",
         "exposure", "saturation", "contrast", "gamma", "content_offset_y", "vsync",
         "layout_mode", "crop_x", "crop_y", "crop_w", "crop_h", "show_cursor", "keep_awake",
-        "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror", "audio_sources",
+        "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror", "audio_sources", "scale_filter",
         "audio_render_gain_db", "audio_capture_gain_db",
     };
     public static readonly HashSet<string> StructKeys = new(StringComparer.OrdinalIgnoreCase)

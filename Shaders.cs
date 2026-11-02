@@ -87,13 +87,9 @@ float3 TmBt2390(float3 x, float wp)
     return x * (Lt / L);
 }
 
-float4 PSMain(VSOut i) : SV_Target
+// Colour pipeline for one (already resampled) source value -> output pixel.
+float4 Grade(float3 col)
 {
-    // Source crop: map the visible UV (0..1 across the viewport) onto the source's
-    // crop rectangle. Without crop CropMin=(0,0)/CropMax=(1,1) -> identity.
-    float2 suv = CropMin + i.uv * (CropMax - CropMin);
-    float3 col = Src.Sample(Smp, suv).rgb;
-
     // Input color space -> linear working light (1.0 = white point).
     // IMPORTANT: DXGI Desktop Duplication and WGC with R16G16B16A16_FLOAT ALWAYS deliver
     // linear scRGB - even when the monitor runs in SDR mode (measured). sRGB-decoding
@@ -131,6 +127,129 @@ float4 PSMain(VSOut i) : SV_Target
     if (OutputIsHdr)
         return float4(col * TargetPaperwhite / 80.0, 1); // back to scRGB
     return float4(LinearToSrgb(col), 1);
+}
+
+// scale_filter = bilinear: one hardware-filtered sample per output pixel (single pass).
+float4 PSMain(VSOut i) : SV_Target
+{
+    // Source crop: map the visible UV (0..1 across the viewport) onto the source's
+    // crop rectangle. Without crop CropMin=(0,0)/CropMax=(1,1) -> identity.
+    float2 suv = CropMin + i.uv * (CropMax - CropMin);
+    return Grade(Src.Sample(Smp, suv).rgb);
+}
+
+// -- Resampling for every other scale_filter ---------------------------------
+// Separable two-pass filter in linear light: PSResampleH filters along x from the source into
+// an FP16 intermediate (output width x source crop rows), PSResampleV filters that along y and
+// grades. Kernels are widened by the scale factor when shrinking, so they average every source
+// texel under an output pixel instead of skipping texels (no aliasing on thin text and lines).
+Texture2D Mid : register(t1);
+
+cbuffer Resample : register(b1)
+{
+    float2 CropOriginPx;   // source crop origin, in texels
+    float2 CropSizePx;     // source crop size, in texels
+    float2 OutOrigin;      // rectangle drawn by this pass, in render-target pixels
+    float2 OutSize;
+    float  RowStart;       // first source row stored in the intermediate
+    float  Rows;           // rows stored in the intermediate
+    int    FilterId;       // 2 area, 3 bicubic (Mitchell), 4 Catmull-Rom, 5 Lanczos2, 6 Lanczos3
+    int    _pad1;
+};
+
+static const int   MaxTaps = 128;
+static const float Pi = 3.14159265;
+
+// Mitchell-Netravali family: B=C=1/3 Mitchell, B=0 C=0.5 Catmull-Rom.
+float CubicBC(float x, float B, float C)
+{
+    x = abs(x);
+    if (x < 1.0)
+        return ((12 - 9 * B - 6 * C) * x * x * x + (-18 + 12 * B + 6 * C) * x * x + (6 - 2 * B)) / 6;
+    if (x < 2.0)
+        return ((-B - 6 * C) * x * x * x + (6 * B + 30 * C) * x * x + (-12 * B - 48 * C) * x + (8 * B + 24 * C)) / 6;
+    return 0;
+}
+
+float Lanczos(float x, float a)
+{
+    x = abs(x);
+    if (x < 1e-5) return 1;
+    if (x >= a) return 0;
+    float px = Pi * x;
+    return a * sin(px) * sin(px / a) / (px * px);
+}
+
+float KernelRadius()
+{
+    return FilterId == 6 ? 3.0 : 2.0;
+}
+
+float KernelWeight(float d, float s)
+{
+    float t = d / max(s, 1.0);   // widen when shrinking (s > 1)
+    if (FilterId == 3) return CubicBC(t, 1.0 / 3.0, 1.0 / 3.0);
+    if (FilterId == 4) return CubicBC(t, 0.0, 0.5);
+    if (FilterId == 5) return Lanczos(t, 2.0);
+    return Lanczos(t, 3.0);
+}
+
+float3 LoadTexel(Texture2D tex, bool horizontal, int i, int fixedCoord)
+{
+    int2 p = horizontal ? int2(i, fixedCoord) : int2(fixedCoord, i);
+    return tex.Load(int3(p, 0)).rgb;
+}
+
+// One output sample along one axis. center/lo/hi are in texels of tex (texel i spans [i, i+1]);
+// s = source texels per output pixel. Edges clamp.
+float3 Resample1D(Texture2D tex, bool horizontal, float center, int fixedCoord, int lo, int hi, float s)
+{
+    float3 sum = 0;
+    float  wsum = 0;
+    if (FilterId == 2)   // area: exact overlap of each texel with the output pixel's footprint
+    {
+        float hw = 0.5 * max(s, 1.0);
+        int first = (int)floor(center - hw);
+        int last = min((int)floor(center + hw), first + MaxTaps - 1);
+        [loop] for (int i = first; i <= last; i++)
+        {
+            float w = max(0.0, min(i + 1.0, center + hw) - max((float)i, center - hw));
+            sum += w * LoadTexel(tex, horizontal, clamp(i, lo, hi), fixedCoord);
+            wsum += w;
+        }
+    }
+    else
+    {
+        float support = KernelRadius() * max(s, 1.0);
+        int first = (int)floor(center - support);
+        int last = min((int)ceil(center + support), first + MaxTaps - 1);
+        [loop] for (int i = first; i <= last; i++)
+        {
+            float w = KernelWeight((i + 0.5) - center, s);
+            sum += w * LoadTexel(tex, horizontal, clamp(i, lo, hi), fixedCoord);
+            wsum += w;
+        }
+    }
+    return sum / max(wsum, 1e-6);
+}
+
+float4 PSResampleH(VSOut i) : SV_Target
+{
+    float s = CropSizePx.x / OutSize.x;
+    float center = CropOriginPx.x + (i.pos.x - OutOrigin.x) * s;
+    int row = (int)RowStart + (int)floor(i.pos.y - OutOrigin.y);
+    int lo = (int)floor(CropOriginPx.x);
+    int hi = (int)ceil(CropOriginPx.x + CropSizePx.x) - 1;
+    return float4(Resample1D(Src, true, center, row, lo, hi, s), 1);
+}
+
+float4 PSResampleV(VSOut i) : SV_Target
+{
+    float s = CropSizePx.y / OutSize.y;
+    float center = (CropOriginPx.y - RowStart) + (i.pos.y - OutOrigin.y) * s;
+    int col = (int)floor(i.pos.x - OutOrigin.x);
+    // Lanczos/bicubic lobes can undershoot below black -> clamp before grading.
+    return Grade(max(Resample1D(Mid, false, center, col, 0, (int)Rows - 1, s), 0));
 }
 
 // Mouse cursor: already-decoded BGRA texture (display-referred), output directly with alpha.

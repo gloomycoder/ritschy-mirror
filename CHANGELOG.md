@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Selectable scale filter** (`scale_filter`, live): Bilinear (default, as before), Area (box
+  average), Bicubic (Mitchell), Bicubic sharp (Catmull-Rom), Lanczos 2 and Lanczos 3. Quality
+  filters run as a separable two-pass resample in linear light, with the kernel widened by the
+  shrink factor — 1px lines and small text no longer turn into moiré when a 4K source is shrunk.
+  The settings drop-down lists each filter's character, typical use and cost.
+- **No filtering at 1:1:** when the source crop and the output have the same size the image is
+  drawn texel-to-pixel and no filter runs; the settings (and the dock while mirroring) show the
+  filter choice disabled with a note.
+- Fixed: the settings window's log button said "Show log" while the log was already shown.
+
 ## v1.4.2 — primary monitor can't be the target
 
 - **The primary monitor is no longer a selectable target.** It is still listed (settings and dock)

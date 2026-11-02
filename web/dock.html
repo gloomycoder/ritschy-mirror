@@ -79,6 +79,16 @@
         <option value="fit">fit (1:1)</option><option value="stretch">stretch</option>
         <option value="top_strip">top_strip</option><option value="crop_region">crop_region</option>
       </select></div>
+    <div class="row"><label data-i18n="settings.scale_filter">Scale filter</label>
+      <select id="scale_filter">
+        <option value="bilinear" data-i18n="filter.bilinear.option">Bilinear</option>
+        <option value="area" data-i18n="filter.area.option">Area</option>
+        <option value="bicubic" data-i18n="filter.bicubic.option">Bicubic (Mitchell)</option>
+        <option value="catmull_rom" data-i18n="filter.catmull_rom.option">Catmull-Rom</option>
+        <option value="lanczos2" data-i18n="filter.lanczos2.option">Lanczos 2</option>
+        <option value="lanczos3" data-i18n="filter.lanczos3.option">Lanczos 3</option>
+      </select></div>
+    <div class="hint" id="scale_hint"></div>
     <div class="row"><label data-i18n="dock.output">Output</label>
       <select id="output_mode" data-kind="struct">
         <option value="windowed">windowed</option><option value="borderless">borderless</option>
@@ -204,6 +214,7 @@ $("vsync").addEventListener("change", e => { $("target_fps").disabled = e.target
 $("operator").addEventListener("change", e => patch({ operator: e.target.value }));
 $("layout_mode").addEventListener("change", e => patch({ layout_mode: e.target.value }));
 $("fps_overlay_position").addEventListener("change", e => patch({ fps_overlay_position: e.target.value }));
+$("scale_filter").addEventListener("change", e => patch({ scale_filter: e.target.value }));
 $("content_offset_y").addEventListener("change", e => patch({ content_offset_y: parseInt(e.target.value || "0", 10) }));
 $("target_fps").addEventListener("change", e => {
   const v = Math.max(0, Math.min(1000, parseInt(e.target.value || "0", 10) || 0));
@@ -344,12 +355,15 @@ function applyStatus(st) {
   tg.disabled = false;
   $("fps_readout").textContent = run ? t("dock.fps_readout", (st.capture_fps ?? 0).toFixed(1), (st.output_fps ?? 0).toFixed(1)) : "";
   $("audio_readout").textContent = st.audio && st.audio.message ? t("dock.audio", st.audio.message) : "";
+  // 1:1 while mirroring → no scaling happens, the filter choice has no effect.
+  $("scale_filter").disabled = st.scale_unscaled === true;
+  $("scale_hint").textContent = st.scale_unscaled === true ? t("settings.scale_filter.unscaled") : "";
   const cfg = st.config || {}; lastConfig = cfg;
   if (!booted) {  // initialize the controls ONCE from the config (no drag clobbering)
     booted = true;
     SLIDERS.forEach(id => { if (cfg[id] != null) { $(id).value = cfg[id]; fmt(id, cfg[id]); } });
     CHECKS.forEach(id => { if (cfg[id] != null) $(id).checked = !!cfg[id]; });
-    ["operator","layout_mode","output_mode","fps_overlay_position"].forEach(id => { if (cfg[id]) $(id).value = cfg[id]; });
+    ["operator","layout_mode","output_mode","fps_overlay_position","scale_filter"].forEach(id => { if (cfg[id]) $(id).value = cfg[id]; });
     if (cfg.output_bit_depth != null) $("output_bit_depth").value = String(cfg.output_bit_depth);
     if (cfg.window_width != null) $("window_width").value = cfg.window_width;
     if (cfg.window_height != null) $("window_height").value = cfg.window_height;

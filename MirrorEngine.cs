@@ -59,6 +59,10 @@ public sealed class MirrorEngine
     public double CaptureFps => IsRunning ? _captureFps.Fps : 0;
     public double OutputFps => IsRunning ? _outputFps.Fps : 0;
 
+    private volatile bool _unscaled;
+    /// <summary>Running and the last frame was drawn 1:1 (scale_filter not in use); null when stopped.</summary>
+    public bool? OutputUnscaled => IsRunning ? _unscaled : null;
+
     /// <summary>Audio-mirror status line for the UI, given whether audio_mirror is switched on.</summary>
     public string AudioStatusText(bool enabledInConfig)
     {
@@ -549,6 +553,7 @@ public sealed class MirrorEngine
                 if (capture.Srv == null || !(newFrame || dirty)) continue;
 
                 renderer.Render(capture, cfg);
+            _unscaled = renderer.Unscaled;
                 if (showOverlay) renderer.DrawOverlay(overlay, cfg.FpsOverlayPosition);
                 renderer.Present(cfg.Vsync);
                 _outputFps.Tick();
@@ -585,6 +590,7 @@ public sealed class MirrorEngine
         to.Exposure = from.Exposure; to.Saturation = from.Saturation;
         to.Contrast = from.Contrast; to.Gamma = from.Gamma; to.ContentOffsetY = from.ContentOffsetY;
         to.Vsync = from.Vsync;
+        to.ScaleFilter = from.ScaleFilter;
         to.LayoutMode = from.LayoutMode;
         to.CropX = from.CropX; to.CropY = from.CropY; to.CropW = from.CropW; to.CropH = from.CropH;
         to.ShowCursor = from.ShowCursor;
