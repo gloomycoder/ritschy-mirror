@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.10 — volume follow fixed for software-volume devices
 
 - **Fixed: volume follow applied the volume twice on some devices.** Measured: loopback already
   contains a volume that Windows applies in software (e.g. HDMI audio, many speakers) and lacks

@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.10 ✓
+
+- **Volume follow per device** — hardware volume followed, software volume (already in the loopback)
+  left alone, mute always; measured on HDMI and USB audio.
+
 ## Done in v1.4.9 ✓
 
 - **Audio follows output volume** — output-device sources follow their Windows volume and mute (switchable);
