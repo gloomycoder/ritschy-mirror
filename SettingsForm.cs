@@ -552,6 +552,7 @@ public sealed partial class SettingsForm : Form
         if (d.IsPrimary) { RevertPrimaryPick(); return; }   // listed for orientation only
         _cfg.TargetDisplay = d.Index; _cfg.TargetKey = d.Key; _cfg.TargetLabel = d.Friendly;
         SaveCfg();
+        BeginInvoke(() => RefreshAudioDevices(force: true));   // "Automatic" now means this monitor's audio
     }
 
     /// <summary>A click on the dimmed primary entry snaps back to the saved target (or nothing).</summary>

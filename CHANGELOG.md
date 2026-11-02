@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **UI wording pass (en / ko / de).** "Capture card" is no longer assumed in the UI (the mirror goes
+  to any output monitor); clearer names for the restart button, tone-map curve, paper white, source
+  peak, scale filter, agent bind address; the tray says "stopped" instead of an "idle" that read
+  like "waiting"; German menu entries say "Spiegelung" instead of "Mirror"; tidier filter
+  descriptions and audio notes.
+- Changing the mix output device or the output monitor updates the audio source list right away
+  (the device that becomes the output drops out as a source) — no more "Refresh devices" needed.
+- Gain boxes show their unit (dB).
 - Docs: new README section **Performance & game impact** — PresentMon measurement showing that DXGI
   and WGC capture keep a borderless game in Independent Flip (no added latency), how the mirror's
   cost scales, and how to check your own setup.

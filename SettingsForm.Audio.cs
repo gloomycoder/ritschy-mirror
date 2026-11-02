@@ -279,6 +279,7 @@ public sealed partial class SettingsForm
         {
             _cfg.AudioOutputId = id;
             _cfg.AudioOutputName = devices.FirstOrDefault(d => d.Id == id)?.Name ?? "";
+            BeginInvoke(() => RefreshAudioDevices(force: true));   // the new output is no longer a source
         });
         combo.Width = 330;
         combo.DropDownWidth = 420;
@@ -344,6 +345,7 @@ public sealed partial class SettingsForm
         };
         _body.Controls.Add(tb);
         _body.Controls.Add(num);
+        _body.Controls.Add(new Label { Text = "dB", Location = new Point(GainValueX + GainNumberWidth + 4, y + 4), AutoSize = true });
     }
 
     private static int SliderTicks(float db, int min, int max) => Math.Clamp((int)Math.Round(db * GainTicksPerDb), min, max);

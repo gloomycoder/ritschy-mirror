@@ -8,7 +8,7 @@ public enum AudioMirrorState { Off, Running, Paused, Unavailable }
 
 /// <summary>
 /// Mixes the selected audio sources and plays the mix on the HDMI/DP audio endpoint of the mirror's
-/// target monitor, so the capture card receives the sound (NAudio WASAPI).
+/// output monitor (e.g. a capture card's input), so it gets the sound too (NAudio WASAPI).
 ///
 /// • Sources (<c>audio_sources</c>, checkbox list in Settings): output devices are captured in
 ///   loopback (what they play — e.g. speakers plus a headset that Discord plays to), input devices

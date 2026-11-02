@@ -49,7 +49,7 @@ public sealed class MirrorConfig
     // ── Frame pacing / diagnostics / audio (live) ───────────────────────
     // Frame limit while VSync is OFF (0 = unlimited). Ignored with VSync on — the display paces then.
     [JsonPropertyName("target_fps")]       public int TargetFps { get; set; } = 0;
-    // Capture/output FPS readout drawn onto the mirror (verification aid; it IS visible on the capture card).
+    // Capture/output FPS readout drawn onto the mirror (verification aid; it IS visible on the output monitor / capture card).
     [JsonPropertyName("fps_overlay")]      public bool FpsOverlay { get; set; } = false;
     // Overlay corner: "top_left" | "top_right" | "bottom_left" | "bottom_right".
     [JsonPropertyName("fps_overlay_position")] public string FpsOverlayPosition { get; set; } = "top_left";
