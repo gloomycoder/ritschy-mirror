@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.1 — multi-source audio mirroring with per-device gain
 
 - **Audio mirroring: pick any number of sources.** A checkbox list in Settings (audio section) offers
   every output device — captured as it sounds, e.g. speakers *plus* the headset Discord plays to —

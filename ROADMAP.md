@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.1 ✓
+
+- **Multi-source audio mirroring** — any output devices (loopback) and input devices mixed into
+  the target monitor's HDMI/DP audio, with a gain per device plus a common gain per group (dB).
+
 ## Done in v1.4.0 ✓
 
 - **Target FPS** with high-resolution pacing and newest-frame-first capture; render/present skipped
