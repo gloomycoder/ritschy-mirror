@@ -366,10 +366,14 @@ public sealed partial class SettingsForm : Form
             Note(L.T("settings.window_missing", WindowLabel()));
 
         Lbl(L.T("settings.target_monitor"));
-        _dstCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(CX, _y), Width = 330 };
+        // Owner-drawn so the primary monitor can be shown dimmed (listed, but not selectable).
+        _dstCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(CX, _y), Width = 330,
+                                   DrawMode = DrawMode.OwnerDrawFixed };
+        _dstCombo.DrawItem += DrawTargetItem;
         int diSel = FindByIdentity(_cfg.TargetKey, _cfg.TargetLabel, _cfg.TargetDisplay);
         RebuildTargetList();
         _dstCombo.SelectedIndexChanged += (_, _) => { if (!_loading) StoreTarget(); };
+        _dstCombo.DropDownClosed += (_, _) => RevertPrimaryPick();
         _body.Controls.Add(_dstCombo);
         var refresh = new Button { Text = "↻", Location = new Point(CX + 338, _y - 1), Width = 32, Height = 26 };
         refresh.Click += (_, _) => RefreshDisplays();
@@ -583,14 +587,40 @@ public sealed partial class SettingsForm : Form
         int entry = _dstCombo.SelectedIndex;
         if (entry < 0 || entry >= _dstIndices.Count) return;
         var d = _displays[_dstIndices[entry]];
+        if (d.IsPrimary) { RevertPrimaryPick(); return; }   // listed for orientation only
         _cfg.TargetDisplay = d.Index; _cfg.TargetKey = d.Key; _cfg.TargetLabel = d.Friendly;
         SaveCfg();
     }
 
+    /// <summary>A click on the dimmed primary entry snaps back to the saved target (or nothing).</summary>
+    private void RevertPrimaryPick()
+    {
+        int entry = _dstCombo.SelectedIndex;
+        if (entry < 0 || entry >= _dstIndices.Count || !_displays[_dstIndices[entry]].IsPrimary) return;
+        int saved = FindByIdentity(_cfg.TargetKey, _cfg.TargetLabel, _cfg.TargetDisplay);
+        bool wasLoading = _loading;
+        _loading = true;
+        _dstCombo.SelectedIndex = saved >= 0 && !_displays[saved].IsPrimary ? _dstIndices.IndexOf(saved) : -1;
+        _loading = wasLoading;
+    }
+
+    private void DrawTargetItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0 || e.Index >= _dstIndices.Count) { e.DrawBackground(); return; }
+        bool primary = _displays[_dstIndices[e.Index]].IsPrimary;
+        bool selected = (e.State & DrawItemState.Selected) != 0 && !primary;
+        using var back = new SolidBrush(selected ? SystemColors.Highlight : _dstCombo.BackColor);
+        e.Graphics.FillRectangle(back, e.Bounds);
+        var color = primary ? SystemColors.GrayText : selected ? SystemColors.HighlightText : _dstCombo.ForeColor;
+        TextRenderer.DrawText(e.Graphics, _dstCombo.Items[e.Index]?.ToString(), e.Font ?? Font, e.Bounds, color,
+                              TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+    }
+
     /// <summary>
     /// Source and target must differ: in monitor mode the target list leaves out the current source
-    /// monitor (mirroring a monitor onto itself only feeds the picture back into the capture). If the
-    /// saved target IS the source — e.g. right after the source was changed — the target is cleared
+    /// monitor (mirroring a monitor onto itself only feeds the picture back into the capture). The
+    /// primary monitor is listed but dimmed and not selectable — the mirror would cover your own
+    /// desktop and taskbar. If the saved target is the source or the primary monitor, it is cleared
     /// (nothing selected) instead of silently picking another monitor.
     /// </summary>
     private void RebuildTargetList()
@@ -598,7 +628,8 @@ public sealed partial class SettingsForm : Form
         int srcIdx = _cfg.ResolveCaptureMode() == "monitor"
             ? FindByIdentity(_cfg.SourceKey, _cfg.SourceLabel, _cfg.SourceDisplay) : -1;
         int dstIdx = FindByIdentity(_cfg.TargetKey, _cfg.TargetLabel, _cfg.TargetDisplay);
-        bool clash = srcIdx >= 0 && dstIdx == srcIdx;
+        // A saved target equal to the source, or on the primary monitor, is cleared (nothing selected).
+        bool clash = dstIdx >= 0 && (dstIdx == srcIdx || _displays[dstIdx].IsPrimary);
         if (clash) ClearTarget();
 
         var names = DisplayNames();
@@ -606,7 +637,8 @@ public sealed partial class SettingsForm : Form
         bool wasLoading = _loading;
         _loading = true;
         _dstCombo.Items.Clear();
-        _dstCombo.Items.AddRange(_dstIndices.Select(i => (object)names[i]).ToArray());
+        _dstCombo.Items.AddRange(_dstIndices.Select(i => (object)(_displays[i].IsPrimary
+            ? $"{names[i]}  —  {L.T("display.primary")}" : names[i])).ToArray());
         _dstCombo.SelectedIndex = clash ? -1 : _dstIndices.IndexOf(dstIdx);
         _loading = wasLoading;
         if (clash) SaveCfg();

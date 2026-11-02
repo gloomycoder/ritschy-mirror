@@ -136,6 +136,8 @@
   "error.no_source_selected": "Kein Quell-Monitor ausgewählt",
   "error.no_target_selected": "Kein Ziel-Monitor ausgewählt",
   "error.same_source_target": "Quelle und Ziel sind derselbe Monitor — bitte ein anderes Ziel wählen",
+  "display.primary": "Hauptmonitor",
+  "error.target_is_primary": "Das Ziel ist der Hauptmonitor — bitte einen Zweitmonitor wählen (der Spiegel würde den Desktop verdecken)",
   "error.recovery_failed": "Spiegelung ließ sich nach mehreren Versuchen nicht wiederherstellen — gestoppt.",
   "error.no_window_selected": "Kein Fenster ausgewählt",
   "error.no_capturable_windows": "Keine aufnehmbaren Fenster gefunden",

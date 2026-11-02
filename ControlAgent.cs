@@ -58,13 +58,21 @@ public sealed class ControlAgent
                 _run = true;
                 _thread = new Thread(Loop) { IsBackground = true, Name = "MirrorAgent" };
                 _thread.Start();
-                _engine.Log($"HTTP agent listening on {prefix}");
+                _engine.Log(host == "localhost"
+                    ? $"HTTP agent listening on {prefix} (local only)"
+                    : $"HTTP agent listening on {prefix}");
                 return;
             }
             catch (Exception ex)
             {
-                _engine.Log($"HTTP agent bind {prefix} failed: {ex.Message}");
-                if (host == "localhost") throw;
+                if (host == "localhost")
+                {
+                    _engine.Log($"HTTP agent could not listen on {prefix}: {ex.Message}");
+                    throw;
+                }
+                // Expected without a URL reservation: not an error, the local fallback follows.
+                _engine.Log($"HTTP agent: network bind {prefix} not permitted ({ex.Message.Trim()}) — needs a URL " +
+                            "reservation (install.ps1 as admin); falling back to local only.");
             }
         }
     }
@@ -158,6 +166,7 @@ public sealed class ControlAgent
                         ["index"] = d.Index, ["name"] = d.Name, ["friendly"] = d.Friendly,
                         ["key"] = d.Key,
                         ["resolution"] = d.Resolution, ["hdr"] = d.Hdr, ["adapter"] = d.Adapter,
+                        ["primary"] = d.IsPrimary,
                     });
                 WriteJson(ctx, 200, arr);
                 break;

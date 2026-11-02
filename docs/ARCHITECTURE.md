@@ -242,6 +242,10 @@ the render thread, Windows releases it automatically if that thread ever exits.
 `capture_mode` = `monitor` (default) or `window`; in window mode the source is the window matched
 by `window_exe` + `window_title` (stable identity) instead of `source_display`.
 
+Source and target must differ (monitor mode), and the **primary monitor** (desktop origin 0,0)
+can't be the target outside the windowed test mode — the GUI and dock list it dimmed and
+unselectable, preflight and session start refuse it. The mirror thus never covers the taskbar.
+
 `crop_*` are in 0..1 of the source and only used when `layout_mode = crop_region`.
 `output_mode` empty falls back to the legacy `windowed` flag for backward compatibility.
 
@@ -260,7 +264,7 @@ expanded sections, `ui_show_log` — log pane visible).
 | `GET /lang` | Active language pack `{lang, strings}` (used by the dock) |
 | `GET /config` · `POST /config` | Read config / merge a whitelisted patch |
 | `POST /start` · `/stop` · `/restart` | Control rendering |
-| `GET /displays` | Enumerated displays (index, name, friendly, resolution, hdr, adapter) |
+| `GET /displays` | Enumerated displays (index, name, friendly, key, resolution, hdr, adapter, primary) |
 | `GET /windows` | Capturable windows for the window-source picker (title, exe, pid) |
 
 ### RitschyBot Cockpit integration (optional)

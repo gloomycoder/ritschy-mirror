@@ -149,7 +149,7 @@ const running = () => $("toggle").dataset.running === "1";
 const FALLBACK = {
   "dock.running": "running", "dock.stopped": "stopped",
   "dock.start": "▶  Start mirror", "dock.stop": "■  Stop mirror",
-  "dock.agent_unreachable": "Agent not reachable",
+  "dock.agent_unreachable": "Agent not reachable", "display.primary": "primary monitor",
   "dock.fps_readout": "Capture {0} · Output {1} fps", "dock.audio": "Audio: {0}",
 };
 let STR = {}, curLang = null;
@@ -314,8 +314,14 @@ function renderTargets(cfg) {
   const src = (cfg.capture_mode || "monitor") === "monitor" ? findDisplay(cfg, "source") : -1;
   const sel = $("dst"); sel.innerHTML = "";
   dstMap = displays.map(d => d.index).filter(i => i !== src);
-  dstMap.forEach(i => sel.appendChild(displayOption(displays[i])));
-  sel.selectedIndex = dstMap.indexOf(findDisplay(cfg, "target"));
+  dstMap.forEach(i => {
+    const o = displayOption(displays[i]);
+    // The primary monitor is listed for orientation but cannot be picked (it would cover the desktop).
+    if (displays[i].primary) { o.disabled = true; o.textContent += "  —  " + t("display.primary"); }
+    sel.appendChild(o);
+  });
+  const tgt = findDisplay(cfg, "target");
+  sel.selectedIndex = tgt >= 0 && !displays[tgt].primary ? dstMap.indexOf(tgt) : -1;
 }
 
 function syncMonitorSelection(cfg) {

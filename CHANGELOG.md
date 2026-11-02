@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.2 — primary monitor can't be the target
+
+- **The primary monitor is no longer a selectable target.** It is still listed (settings and dock)
+  but dimmed, marked "primary monitor" and can't be picked; a saved primary target is cleared, and
+  starting with it is refused (the windowed test mode excepted). The mirror can therefore never
+  cover your own desktop and taskbar — stopping it from the tray is always one right-click away.
+- Clearer HTTP agent log: a refused network bind (no URL reservation) is now logged as an expected
+  fallback to local-only listening instead of looking like a failure.
+
 ## v1.4.1 — multi-source audio mirroring with per-device gain
 
 - **Audio mirroring: pick any number of sources.** A checkbox list in Settings (audio section) offers

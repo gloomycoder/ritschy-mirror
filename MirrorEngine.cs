@@ -23,6 +23,9 @@ public sealed class DisplayInfo
     public int Right { get; set; }
     public int Bottom { get; set; }
 
+    /// <summary>Windows places the primary monitor's desktop origin at (0,0).</summary>
+    public bool IsPrimary => Left == 0 && Top == 0;
+
     /// <summary>Display name: prefers Friendly, otherwise the GDI name.</summary>
     public string DisplayName => string.IsNullOrWhiteSpace(Friendly) ? Name : Friendly;
 }
@@ -163,8 +166,10 @@ public sealed class MirrorEngine
         if (displays.Count == 0) return new LocalizedText("error.no_displays");
         var cfg = MirrorConfig.Load(ConfigPath);
         var ids = displays.Select(d => (Key: d.Key, Label: d.Friendly)).ToList();
-        var (_, de) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, isSource: false);
+        var (dIdx, de) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, isSource: false);
         if (de != null) return de;
+        if (displays[dIdx].IsPrimary && cfg.ResolveOutputMode() != "windowed")
+            return new LocalizedText("error.target_is_primary");
         if (cfg.ResolveCaptureMode() != "monitor") return null;   // window source: any monitor may be the target
         var (si, se) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, isSource: true);
         if (se != null) return se;
@@ -310,6 +315,16 @@ public sealed class MirrorEngine
         var dst = displays[dstIdx];
         string mode = cfg.ResolveOutputMode();
         string captureMode = cfg.ResolveCaptureMode();
+        // The mirror covers its target: on the primary monitor that is your own desktop and taskbar
+        // (the only way back would be the tray). The windowed test mode is fine anywhere.
+        if (mode != "windowed" && dst.L == 0 && dst.T == 0)
+        {
+            var primary = new LocalizedText("error.target_is_primary");
+            Log("Start aborted: " + primary.English);
+            _lastError = primary;
+            CleanupEnum();
+            return (SessionResult.Fatal, 0);
+        }
 
         var featureLevels = new[] { FeatureLevel.Level_11_1, FeatureLevel.Level_11_0 };
         // Everything created from here on is released in the finally below — also when a step throws
@@ -363,14 +378,14 @@ public sealed class MirrorEngine
                     return (SessionResult.Fatal, 0);
                 }
                 if (srcIdx == dstIdx)
-            {
-                // Mirroring a monitor onto itself only feeds the output back into the capture.
-                var same = new LocalizedText("error.same_source_target");
-                Log("Start aborted: " + same.English);
-                _lastError = same;
-                return (SessionResult.Fatal, 0);
-            }
-            var src = displays[srcIdx];
+                {
+                    // Mirroring a monitor onto itself only feeds the output back into the capture.
+                    var same = new LocalizedText("error.same_source_target");
+                    Log("Start aborted: " + same.English);
+                    _lastError = same;
+                    return (SessionResult.Fatal, 0);
+                }
+                var src = displays[srcIdx];
                 D3D11CreateDevice(src.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
                     out device, out context).CheckError();
                 Log($"Source = Display {srcIdx} ({src.Name}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");

@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.2 ✓
+
+- **Primary monitor excluded as target** (listed dimmed, unselectable; refused at start) — the tray
+  stays reachable to stop the mirror.
+
 ## Done in v1.4.1 ✓
 
 - **Multi-source audio mirroring** — any output devices (loopback) and input devices mixed into
