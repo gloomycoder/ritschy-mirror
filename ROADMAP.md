@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.9 ✓
+
+- **Audio follows output volume** — output-device sources follow their Windows volume and mute (switchable);
+  the audio worker recovers from unexpected errors on its own.
+
 ## Done in v1.4.8 ✓
 
 - **Stability** — no overlapping render threads after a slow stop, crash-safe audio cleanup, WGC
