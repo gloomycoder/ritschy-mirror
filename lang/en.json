@@ -13,7 +13,6 @@
   "settings.language.auto": "Automatic (Windows)",
   "settings.language.note": "Custom packs: put <code>.json into the \"lang\" folder next to the exe.",
 
-  "section.source_target": "Source / target & mode",
   "settings.capture_mode": "Source mode",
   "settings.capture_mode.note1": "monitor = whole screen  ·  window = only ONE window / fullscreen app",
   "settings.capture_mode.note2": "(Window mode does NOT show your desktop when you alt-tab — safer.)",
@@ -30,7 +29,6 @@
   "settings.window_height": "Test window height",
   "settings.struct_note": "Structure (monitor/mode/bit depth/window) applies only after a restart.",
 
-  "section.image": "Image / tonemap",
   "settings.tonemap": "Tonemap enabled (HDR→SDR)",
   "settings.operator": "Operator",
   "settings.exposure": "Exposure (stops)",
@@ -44,7 +42,7 @@
   "settings.vsync": "VSync",
   "settings.keep_awake": "Prevent sleep / monitor power-off (while mirroring)",
 
-  "section.frame": "Frame rate / diagnostics",
+  "section.frame": "Frame rate",
   "settings.target_fps": "Target FPS (0 = unlimited)",
   "settings.target_fps.note": "Only with VSync off — with VSync on, the display refresh paces the output.",
   "settings.fps_overlay": "Show capture / output FPS",
@@ -55,7 +53,6 @@
   "pos.bottom_left": "Bottom left",
   "pos.bottom_right": "Bottom right",
 
-  "section.audio": "Audio",
   "settings.audio_mirror": "Mirror audio to the target monitor (HDMI/DP)",
   "settings.audio_mirror.note": "Source = Windows default playback device. Pauses automatically while that device is the target monitor itself.",
   "settings.audio_status": "Status: {0}",
@@ -91,6 +88,21 @@
   "update.title": "RitschyMirror — Update",
   "update.available": "Update {0} is available (you have v{1}).\n\nOpen the download page now?",
   "update.latest": "You have the latest version (v{0}).",
+
+  "section.mirroring": "Mirroring",
+  "section.tonemap": "Tone mapping (HDR→SDR)",
+  "section.adjust": "Picture adjustments",
+  "settings.tonemap.note": "Only affects an HDR source — an SDR source is passed through 1:1.",
+  "settings.crop.note": "Used only with layout mode crop_region (values are fractions 0..1 of the source).",
+  "settings.btn.log_show": "Show log",
+  "settings.btn.log_hide": "Hide log",
+  "summary.running": "Running",
+  "summary.stopped": "Stopped",
+  "summary.vsync": "VSync",
+  "summary.fps_limit": "{0} fps limit",
+  "summary.unlimited": "Unlimited",
+  "summary.rates": "capture {0} / output {1} fps",
+  "summary.crop_inactive": "inactive (layout is not crop_region)",
 
   "tray.start": "Start mirror",
   "tray.stop": "Stop mirror",

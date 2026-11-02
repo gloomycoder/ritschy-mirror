@@ -18,6 +18,9 @@ public sealed class AppSettings
     [JsonPropertyName("autostart_mirror")] public bool AutostartMirror { get; set; } = false;
     // UI language pack: "auto" (Windows UI language, English fallback) or a code such as "ko"/"en"/"de".
     [JsonPropertyName("language")]      public string Language { get; set; } = L.Auto;
+    // Settings window state: which feature sections are expanded, and whether the log pane is shown.
+    [JsonPropertyName("ui_expanded")]   public List<string> UiExpanded { get; set; } = new() { "mirroring" };
+    [JsonPropertyName("ui_show_log")]   public bool UiShowLog { get; set; } = false;
 
     private static readonly JsonSerializerOptions ReadOpts = new()
     {

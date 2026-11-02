@@ -97,6 +97,9 @@ sends the result to the display your capture card is plugged into.
 - 📊 **Capture / output FPS readout** *(optional, for verification)* — shows the capture and output
   frame rates in a corner of your choice (top/bottom, left/right). Note that it is drawn into the
   mirrored picture, so the capture card sees it as well.
+- 🗂️ **Tidy settings window** — one collapsible section per feature, each with its on/off switch
+  and a live summary in the header (running state, frame rates, audio status …), plus a
+  **live log pane** at the bottom that you can resize or hide.
 - 🌐 **Language packs** — UI in **English, 한국어 and Deutsch**, following the Windows display
   language (or picked in Settings). Drop a `lang\<code>.json` next to the exe to tweak a
   translation or add a new language — the OBS dock uses the same packs.

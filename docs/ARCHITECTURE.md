@@ -175,7 +175,9 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 |---|---|
 | `Program.cs` | Entry point → tray app |
 | `TrayContext.cs` | NotifyIcon + menu, owns the engine + HTTP agent |
-| `SettingsForm.cs` | Local settings GUI (all parameters) |
+| `SettingsForm.cs` | Local settings GUI (all parameters), one collapsible section per feature |
+| `CollapsibleSection.cs` | Section control: header (on/off toggle + live summary) + collapsible body |
+| `LogView.cs` | Live `mirror.log` pane at the bottom of the settings window |
 | `MirrorEngine.cs` | Render loop (start/stop), display enumeration, live config reload |
 | `Renderer.cs` | Swap chain + layout/crop geometry + shader pipeline (consumes `ICaptureSource`) |
 | `ICaptureSource.cs` | Capture-source seam (FP16 SRV + size/HDR/cursor + acquire/recover/refresh) |
@@ -230,7 +232,8 @@ by `window_exe` + `window_title` (stable identity) instead of `source_display`.
 Listens on `http://<bind>:<port>/` — default port **8788**. `bind` = `"+"` makes it reachable
 from the network (requires a URL-ACL / admin; otherwise it falls back to `localhost`).
 Configured via `app_settings.json` (`agent_bind`, `agent_port`, `agent_enabled`); the same file
-holds `autostart_mirror` and the UI `language`.
+holds `autostart_mirror`, the UI `language` and the settings-window state (`ui_expanded` — the
+expanded sections, `ui_show_log` — log pane visible).
 
 | Route | Description |
 |---|---|

@@ -13,7 +13,6 @@
   "settings.language.auto": "Automatisch (Windows)",
   "settings.language.note": "Eigene Sprachpakete: <code>.json in den Ordner „lang\" neben der exe legen.",
 
-  "section.source_target": "Quelle / Ziel & Modus",
   "settings.capture_mode": "Quellen-Modus",
   "settings.capture_mode.note1": "monitor = ganzer Bildschirm  ·  window = nur EIN Fenster / Vollbild-App",
   "settings.capture_mode.note2": "(Fenster-Modus zeigt beim Raustaben NICHT deinen Desktop — sicherer.)",
@@ -30,7 +29,6 @@
   "settings.window_height": "Test-Fenster Höhe",
   "settings.struct_note": "Struktur (Monitor/Modus/Bit-Tiefe/Fenster) wirkt erst nach Neustart.",
 
-  "section.image": "Bild / Tonemap",
   "settings.tonemap": "Tonemap aktiv (HDR→SDR)",
   "settings.operator": "Operator",
   "settings.exposure": "Belichtung (Stops)",
@@ -44,7 +42,7 @@
   "settings.vsync": "VSync",
   "settings.keep_awake": "Schlafmodus / Monitor-Abschaltung verhindern (während Spiegelung)",
 
-  "section.frame": "Bildrate / Diagnose",
+  "section.frame": "Bildrate",
   "settings.target_fps": "Ziel-FPS (0 = unbegrenzt)",
   "settings.target_fps.note": "Nur bei VSync aus — mit VSync bestimmt die Bildwiederholrate das Tempo.",
   "settings.fps_overlay": "Aufnahme-/Ausgabe-FPS anzeigen",
@@ -55,7 +53,6 @@
   "pos.bottom_left": "Unten links",
   "pos.bottom_right": "Unten rechts",
 
-  "section.audio": "Audio",
   "settings.audio_mirror": "Audio auf den Ziel-Monitor spiegeln (HDMI/DP)",
   "settings.audio_mirror.note": "Quelle = Windows-Standardwiedergabegerät. Pausiert automatisch, solange dieses Gerät der Ziel-Monitor selbst ist.",
   "settings.audio_status": "Status: {0}",
@@ -91,6 +88,21 @@
   "update.title": "RitschyMirror — Update",
   "update.available": "Update {0} ist verfügbar (du hast v{1}).\n\nJetzt zur Download-Seite?",
   "update.latest": "Du hast die neueste Version (v{0}).",
+
+  "section.mirroring": "Spiegelung",
+  "section.tonemap": "Tonemapping (HDR→SDR)",
+  "section.adjust": "Bildkorrektur",
+  "settings.tonemap.note": "Wirkt nur bei einer HDR-Quelle — eine SDR-Quelle wird 1:1 durchgereicht.",
+  "settings.crop.note": "Nur im Layout-Modus crop_region (Werte als Anteil 0..1 der Quelle).",
+  "settings.btn.log_show": "Log zeigen",
+  "settings.btn.log_hide": "Log ausblenden",
+  "summary.running": "Läuft",
+  "summary.stopped": "Gestoppt",
+  "summary.vsync": "VSync",
+  "summary.fps_limit": "{0}-fps-Limit",
+  "summary.unlimited": "Unbegrenzt",
+  "summary.rates": "Aufnahme {0} / Ausgabe {1} fps",
+  "summary.crop_inactive": "inaktiv (Layout ist nicht crop_region)",
 
   "tray.start": "Mirror starten",
   "tray.stop": "Mirror stoppen",

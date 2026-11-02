@@ -30,6 +30,15 @@
   created, even when a setup step throws.
 - Code comments and `mirror.log` messages are now English.
 - The dock shows the last error, the FPS rates and the audio-mirror status.
+- **Reworked settings window.** Every main feature (mirroring, tone mapping, picture adjustments,
+  frame rate, FPS readout, audio mirroring, crop, connection, general) is a collapsible section:
+  the header carries the on/off switch and a live summary (e.g. running state and source → target,
+  `60 fps limit · capture 59.9 / output 60.0 fps`, the audio-mirror status), expanding it shows the
+  sub-settings. Expanded sections are remembered.
+- **Log pane** at the bottom of the settings window: the tail of `mirror.log` plus every new line
+  live; resizable, hidden with one click (remembered).
+- **Fixed: the settings window at 125/150 % display scaling** — controls no longer overlap and
+  sliders render correctly.
 
 ## v1.3.2 — fix a badly darkened picture when the source monitor is in SDR mode
 

@@ -73,11 +73,15 @@ public sealed class MirrorEngine
 
     public bool IsRunning => _thread is { IsAlive: true };
 
+    /// <summary>Raised for every log line, on the thread that logged (the settings log view listens).</summary>
+    public event Action<string>? LogWritten;
+
     public void Log(string msg)
     {
         var line = $"[{DateTime.Now:HH:mm:ss}] {msg}";
         Console.WriteLine(line);
         try { File.AppendAllText(LogPath, line + Environment.NewLine); } catch { }
+        LogWritten?.Invoke(line);
     }
 
     // ── Control ─────────────────────────────────────────────────────────────

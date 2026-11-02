@@ -13,7 +13,6 @@
   "settings.language.auto": "자동 (Windows)",
   "settings.language.note": "사용자 언어팩: exe 옆 \"lang\" 폴더에 <코드>.json 파일을 넣으세요.",
 
-  "section.source_target": "소스 / 대상 & 모드",
   "settings.capture_mode": "소스 모드",
   "settings.capture_mode.note1": "monitor = 전체 화면  ·  window = 창 하나 / 전체화면 앱만",
   "settings.capture_mode.note2": "(window 모드는 Alt+Tab 해도 바탕화면이 보이지 않아 더 안전합니다.)",
@@ -30,7 +29,6 @@
   "settings.window_height": "테스트 창 높이",
   "settings.struct_note": "구조 설정(모니터/모드/비트 심도/창)은 재시작해야 적용됩니다.",
 
-  "section.image": "화면 / 톤매핑",
   "settings.tonemap": "톤매핑 사용 (HDR→SDR)",
   "settings.operator": "연산자",
   "settings.exposure": "노출 (스톱)",
@@ -44,7 +42,7 @@
   "settings.vsync": "VSync",
   "settings.keep_awake": "절전 / 모니터 꺼짐 방지 (미러링 중)",
 
-  "section.frame": "프레임 / 진단",
+  "section.frame": "프레임 레이트",
   "settings.target_fps": "목표 FPS (0 = 제한 없음)",
   "settings.target_fps.note": "VSync가 꺼져 있을 때만 적용됩니다. VSync가 켜져 있으면 디스플레이 주사율을 따릅니다.",
   "settings.fps_overlay": "캡처 / 출력 FPS 표시",
@@ -55,7 +53,6 @@
   "pos.bottom_left": "좌측 하단",
   "pos.bottom_right": "우측 하단",
 
-  "section.audio": "오디오",
   "settings.audio_mirror": "오디오를 대상 모니터(HDMI/DP)로 미러링",
   "settings.audio_mirror.note": "소스 = Windows 기본 출력 장치. 기본 출력이 대상 모니터 자체이면 자동으로 일시정지됩니다.",
   "settings.audio_status": "상태: {0}",
@@ -91,6 +88,21 @@
   "update.title": "RitschyMirror — 업데이트",
   "update.available": "업데이트 {0}을(를) 사용할 수 있습니다 (현재 v{1}).\n\n지금 다운로드 페이지를 열까요?",
   "update.latest": "최신 버전(v{0})을 사용 중입니다.",
+
+  "section.mirroring": "미러링",
+  "section.tonemap": "톤매핑 (HDR→SDR)",
+  "section.adjust": "화면 보정",
+  "settings.tonemap.note": "HDR 소스에만 적용됩니다. SDR 소스는 그대로 전달됩니다.",
+  "settings.crop.note": "레이아웃 모드가 crop_region일 때만 적용됩니다 (값은 소스 대비 0..1 비율).",
+  "settings.btn.log_show": "로그 보기",
+  "settings.btn.log_hide": "로그 숨기기",
+  "summary.running": "실행 중",
+  "summary.stopped": "정지됨",
+  "summary.vsync": "VSync",
+  "summary.fps_limit": "{0} fps 제한",
+  "summary.unlimited": "제한 없음",
+  "summary.rates": "캡처 {0} / 출력 {1} fps",
+  "summary.crop_inactive": "미사용 (레이아웃이 crop_region 아님)",
 
   "tray.start": "미러링 시작",
   "tray.stop": "미러링 정지",
