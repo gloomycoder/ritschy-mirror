@@ -153,6 +153,7 @@
   "display.primary": "주 모니터",
   "error.target_is_primary": "출력 모니터가 주 모니터입니다. 보조 모니터를 선택하세요 (미러 화면이 바탕화면을 덮습니다)",
   "error.recovery_failed": "여러 번 시도했지만 미러링을 복구하지 못해 중지했습니다.",
+  "error.still_stopping": "이전 미러링 세션이 아직 종료 중입니다. 잠시 후 다시 시도하세요.",
   "error.no_window_selected": "캡처 대상이 선택되지 않았습니다",
   "error.no_capturable_windows": "캡처할 수 있는 창이 없습니다",
   "error.window_not_found": "창 '{0}'을(를) 찾을 수 없습니다 (앱이 실행 중인가요?)",

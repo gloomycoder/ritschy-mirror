@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed: two render threads could run at once.** If a stop took longer than 4 s, the engine
+  forgot the old thread and a new start shared its stop flag, so the old session could resume next
+  to the new one (and switch the new session's audio off when it finally ended). The engine now
+  keeps a thread that is still shutting down and refuses to start until it has finished, with a
+  message in the UI.
+- **Fixed: a failing audio device release could crash the app.** Every audio resource (sources,
+  output, endpoints) is now released on its own with its error logged, and the audio worker has a
+  last-resort handler — an exception there no longer ends the process; the next change starts a
+  fresh worker.
+- **Fixed: WGC could keep a frame from an already stopped capture session.** A frame arriving
+  while the session was being stopped is now dropped instead of being parked for the next one.
+- **Soak log:** while mirroring, the log gets one line a minute with capture/output fps, memory
+  and handle count, plus one line per audio source with queue latency (average and range),
+  playback ratio, restarts after silence and emergency trims — so a long run shows leaks or clock
+  drift.
+- The settings log pane keeps the last **500 lines** (was: about 200,000 characters).
+
 ## v1.4.7 — no more cut-off sound endings in the audio mirror
 
 - **Fixed: the end of a short sound could be cut off** (e.g. the last millisecond of a 31–41 ms

@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -22,7 +23,9 @@ internal sealed class AudioSourceChannel : IDisposable
     private readonly WasapiRecorder _recorder;
     private readonly BufferedWaveProvider _queue;
     private readonly VolumeSampleProvider _gain;
+    private readonly DriftCompensator _drift;
     private byte[] _trimScratch = Array.Empty<byte>();
+    private int _trims;   // emergency cuts since the last TakeStats()
 
     /// <summary>Device-level identity ("render:{endpoint id}") — used to drop duplicates.</summary>
     public string DeviceKey { get; }
@@ -62,7 +65,7 @@ internal sealed class AudioSourceChannel : IDisposable
                 2 => s,
                 _ => new DownmixToStereoSampleProvider(s, mask),
             };
-            s = new DriftCompensator(s, _queue);
+            s = _drift = new DriftCompensator(s, _queue);
             if (s.WaveFormat.SampleRate != mixFormat.SampleRate)
                 s = new WdlResamplingSampleProvider(s, mixFormat.SampleRate);
             _gain = new VolumeSampleProvider(s) { Volume = gain };
@@ -95,7 +98,11 @@ internal sealed class AudioSourceChannel : IDisposable
         if (drop <= 0) return;
         if (_trimScratch.Length < drop) _trimScratch = new byte[drop];
         _queue.Read(_trimScratch.AsSpan(0, drop)); // discard the oldest audio → latency back to target
+        Interlocked.Increment(ref _trims);
     }
+
+    /// <summary>Soak figures since the previous call: drift compensation + emergency cuts.</summary>
+    public (DriftStats Drift, int Trims) TakeStats() => (_drift.TakeStats(), Interlocked.Exchange(ref _trims, 0));
 
     private static int BytesFor(WaveFormat fmt, int ms)
     {
@@ -109,9 +116,14 @@ internal sealed class AudioSourceChannel : IDisposable
     {
         _recorder.DataAvailable -= OnCaptured;
         _recorder.RecordingStopped -= OnStopped;
+        // Release every part even if one throws (a vanished device fails in odd places);
+        // the first error goes to the caller, which logs it.
+        Exception? first = null;
         try { _recorder.StopRecording(); }
         catch (InvalidOperationException) { /* never started / already stopped */ }
-        _recorder.Dispose();
-        _device.Dispose();
+        catch (Exception ex) { first ??= ex; }
+        try { _recorder.Dispose(); } catch (Exception ex) { first ??= ex; }
+        try { _device.Dispose(); } catch (Exception ex) { first ??= ex; }
+        if (first != null) ExceptionDispatchInfo.Capture(first).Throw();
     }
 }

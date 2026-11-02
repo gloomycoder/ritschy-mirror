@@ -130,6 +130,13 @@ format. The rates are also in `GET /status` (`capture_fps`, `output_fps`).
   (±0.5 % max, 4-point Hermite). When a source stops (loopback sends nothing during silence) the
   rest of its queue is played out, then it re-primes to the target — waiting at most 40 ms after
   data arrives, so a short click that never fills the target still plays. Only a runaway queue (≥ 300 ms, playback stalled) is cut back on the capture thread.
+- **Soak figures** — `DriftCompensator.TakeStats()` reports the smoothed queue latency, its range
+  and the ratio range since the previous call (the tail of a sound is left out), plus restarts after
+  silence; `AudioSourceChannel` adds its emergency trims. The engine logs them once a minute.
+- **Cleanup** — `StopPipeline` releases every source, the player and the endpoint independently
+  (errors logged, never thrown: it runs inside the worker's catch/finally). An exception that
+  still escapes the worker loop is caught there, sets the status and ends the worker; the next
+  `SetDesired()` with a change starts a new one.
 - **Output** — `audio_output_id` if set, otherwise the target monitor's endpoint by EDID name.
 - **Retry** — a (re)start that throws (device not ready, exclusive use by another app) is retried
   by the worker on a 1 s → 30 s back-off; a success resets it. Gain = group dB (`audio_render_gain_db` / `audio_capture_gain_db`) + source dB,
@@ -201,6 +208,13 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
    CLR `FailFast`ed (`callback on a garbage collected delegate`) — a hard, log-less process death,
    made worse by every window after the first silently reusing the first window's delegate (a failed
    re-`RegisterClassEx`). Unrelated to the capture-loss reinit above.
+4. **One render thread at a time** — `Stop()` waits up to 4 s for the thread. If it is still
+   tearing down after that, the engine keeps the reference (`IsRunning` stays true) and `Start()`
+   refuses with `error.still_stopping` instead of starting a second thread on the same stop flag,
+   output window and audio mirror.
+5. **WGC shutdown** — `WgcCapture` only accepts a frame into its newest-frame slot when the
+   callback's pool is the active one (`_activePool`, under `_frameLock`); `StopSession` clears it
+   before releasing the slot, so a callback still running during teardown drops its frame.
 
 ## Source files
 
@@ -316,7 +330,13 @@ two transports are interchangeable.
   30 days (`LogRetentionDays`, by last write time) are deleted at start. The settings log pane and
   the tray's "Open log" show only the current run's file. Every render start lists all outputs
   (index, name, resolution, color space, adapter) — the basis for display selection and HDR
-  detection.
+  detection. The log pane keeps the last 500 lines.
+- **Soak log** — once a minute while mirroring: `Soak video 60 s: capture … fps, output … fps;
+  private … MB, GC heap … MB, … handles.` and per audio source `Soak audio 60 s "<device>": queue
+  40.1 ms (34.7..42.7), ratio 1.000009 (0.999749..1.000034), N restart(s) after silence, N emergency
+  trim(s).` ("silent" when nothing played). A stable ratio = locked clocks (1.000137 ≈ 137 ppm);
+  a latency range that walks away from 40 ms, emergency trims, or rising memory/handles point to
+  drift or a leak.
 - **Migration** — config files and `mirror.log` left next to the exe by older versions are moved
   into `config\` / `log\mirror_legacy.log` on first start (a legacy config wins over the default
   that a build drops into `config\`).

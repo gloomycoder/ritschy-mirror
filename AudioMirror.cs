@@ -106,7 +106,7 @@ public sealed class AudioMirror : IDisposable
             foreach (var ch in _channels) ch.SetGain(GainFor(ch.ConfigKey, ch.IsRender));
         }
         if (!rebuild) return;
-        if (enabled && _worker is null)
+        if (enabled && _worker is not { IsAlive: true })   // not started yet, or ended by a crash
         {
             _worker = new Thread(WorkerMain) { IsBackground = true, Name = "AudioMirror" };
             _worker.Start();
@@ -151,13 +151,21 @@ public sealed class AudioMirror : IDisposable
                 }
             }
         }
+        catch (Exception ex)
+        {
+            // Last resort: an exception escaping a background thread ends the whole process.
+            // The next SetDesired() that changes something starts a fresh worker.
+            _log("Audio mirror worker failed: " + ex);
+            SetStatus(AudioMirrorState.Unavailable, new LocalizedText("error.raw", ex.Message));
+        }
         finally
         {
             StopPipeline();
-            try { _notify?.Dispose(); } catch (Exception ex) { _log("Audio mirror: notify dispose: " + ex.Message); }
-            try { _enumerator?.Dispose(); } catch (Exception ex) { _log("Audio mirror: enumerator dispose: " + ex.Message); }
+            TryDispose(_notify, "notify");
+            TryDispose(_enumerator, "enumerator");
             _notify = null;
             _enumerator = null;
+            lock (_gate) _compositionKey = "";   // so the next SetDesired() rebuilds
         }
     }
 
@@ -374,11 +382,11 @@ public sealed class AudioMirror : IDisposable
         }
         catch
         {
-            foreach (var ch in channels) ch.Dispose();
-            if (handed > channels.Count) sources[handed - 1].Device.Dispose();   // constructor threw
-            foreach (var r in sources.Skip(handed)) r.Device.Dispose();
-            player?.Dispose();
-            dst.Dispose();
+            foreach (var ch in channels) TryDispose(ch, "source");
+            if (handed > channels.Count) TryDispose(sources[handed - 1].Device, "source device");   // constructor threw
+            foreach (var r in sources.Skip(handed)) TryDispose(r.Device, "source device");
+            TryDispose(player, "output");
+            TryDispose(dst, "output device");
             throw;
         }
 
@@ -397,19 +405,46 @@ public sealed class AudioMirror : IDisposable
         var player = _out;
         _out = null;
         _runningKey = "";
+        var outDevice = _outDevice;
+        _outDevice = null;
+        // Every resource is released on its own: one failing must neither leak the rest nor throw
+        // out of the worker (StopPipeline runs in its catch and finally blocks).
         foreach (var ch in channels)
         {
             ch.Stopped -= OnPipelineStopped;
-            try { ch.Dispose(); } catch (Exception ex) { _log("Audio mirror: stop source: " + ex.Message); }
+            TryDispose(ch, "source");
         }
         if (player != null)
         {
             player.PlaybackStopped -= OnPipelineStopped;
             try { player.Stop(); } catch (Exception ex) { _log("Audio mirror: stop output: " + ex.Message); }
-            player.Dispose();
+            TryDispose(player, "output");
         }
-        _outDevice?.Dispose();
-        _outDevice = null;
+        TryDispose(outDevice, "output device");
+    }
+
+    private void TryDispose(IDisposable? d, string what)
+    {
+        try { d?.Dispose(); }
+        catch (Exception ex) { _log($"Audio mirror: release {what}: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Soak log: one line per running source with the drift compensation's queue latency and
+    /// playback ratio since the previous call — long runs show whether the clocks stay locked.
+    /// </summary>
+    public void LogStats(int intervalSec)
+    {
+        List<AudioSourceChannel> channels;
+        lock (_gate) channels = _channels;
+        foreach (var ch in channels)
+        {
+            var (d, trims) = ch.TakeStats();
+            string drift = d.Active
+                ? $"queue {d.AvgMs:0.0} ms ({d.MinMs:0.0}..{d.MaxMs:0.0}), ratio {d.Ratio:0.000000} ({d.MinRatio:0.000000}..{d.MaxRatio:0.000000})"
+                : "silent";
+            _log($"Soak audio {intervalSec} s \"{ch.Name}\": {drift}, {d.Starts} restart(s) after silence, {trims} emergency trim(s).");
+        }
     }
 
     /// <summary>Unexpected stop (device unplugged, exclusive-mode app took the device …) → re-evaluate.</summary>

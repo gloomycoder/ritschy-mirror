@@ -12,11 +12,13 @@ namespace RitschyMirror;
 public sealed class LogView : Panel
 {
     private const int InitialTailBytes = 32 * 1024;
-    private const int MaxChars = 200_000;   // keep the box responsive on long sessions
+    private const int MaxLines = 500;      // keep the box responsive on long sessions
+    private const int TrimSlack = 100;     // trim in batches, not on every new line
     private const float FontSizePt = 8.5f;
 
     private readonly MirrorEngine _engine;
     private readonly TextBox _text;
+    private readonly Queue<string> _lines = new();   // what the box shows, oldest first
 
     public LogView(MirrorEngine engine)
     {
@@ -54,10 +56,19 @@ public sealed class LogView : Panel
     private void Append(string line)
     {
         if (_text.IsDisposed) return;
-        if (_text.TextLength > MaxChars)
-            _text.Text = _text.Text[(_text.TextLength / 2)..];   // drop the older half
-        _text.AppendText(line + Environment.NewLine);
+        _lines.Enqueue(line);
+        if (_lines.Count <= MaxLines + TrimSlack)
+        {
+            _text.AppendText(line + Environment.NewLine);
+            return;
+        }
+        while (_lines.Count > MaxLines) _lines.Dequeue();
+        ShowLines();
+        ScrollToEnd();
     }
+
+    private void ShowLines() =>
+        _text.Text = _lines.Count == 0 ? "" : string.Join(Environment.NewLine, _lines) + Environment.NewLine;
 
     private void ScrollToEnd()
     {
@@ -66,7 +77,8 @@ public sealed class LogView : Panel
         _text.ScrollToCaret();
     }
 
-    /// <summary>Last few KB of mirror.log (shared read — the engine keeps appending to it).</summary>
+    /// <summary>Last few KB (at most <see cref="MaxLines"/> lines) of mirror.log (shared read — the
+    /// engine keeps appending to it).</summary>
     private void LoadTail()
     {
         try
@@ -82,7 +94,10 @@ public sealed class LogView : Panel
                 int nl = tail.IndexOf('\n');
                 tail = nl >= 0 ? tail[(nl + 1)..] : tail;   // skip the partial first line
             }
-            _text.Text = tail.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
+            foreach (var l in tail.Replace("\r\n", "\n").Split('\n'))
+                if (l.Length > 0) _lines.Enqueue(l);
+            while (_lines.Count > MaxLines) _lines.Dequeue();
+            ShowLines();
         }
         catch (IOException ex) { _text.Text = "mirror.log: " + ex.Message + Environment.NewLine; }
         catch (UnauthorizedAccessException ex) { _text.Text = "mirror.log: " + ex.Message + Environment.NewLine; }

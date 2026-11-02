@@ -47,6 +47,10 @@ public sealed class WgcCapture : ICaptureSource
     private const int PoolBuffers = 3;   // one in the slot, one being copied, one free for WGC
     private readonly object _frameLock = new();
     private Direct3D11CaptureFrame? _latest;
+    // The pool whose frames may enter _latest (guarded by _frameLock). A FrameArrived callback that
+    // is already running when StopSession detaches the handler still delivers a frame afterwards;
+    // checking the sender against this drops it instead of parking a dead pool's frame in the slot.
+    private Direct3D11CaptureFramePool? _activePool;
     private readonly AutoResetEvent _frameArrived = new(false);
     private bool _showCursor;
 
@@ -94,6 +98,7 @@ public sealed class WgcCapture : ICaptureSource
         _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             _d3dDevice, DirectXPixelFormat.R16G16B16A16Float, PoolBuffers, new SizeInt32 { Width = _poolW, Height = _poolH });
         _framePool.FrameArrived += OnFrameArrived;
+        lock (_frameLock) _activePool = _framePool;
         _session = _framePool.CreateCaptureSession(_item);
         _session.IsCursorCaptureEnabled = _showCursor;
         TryDisableBorder(_session);
@@ -108,10 +113,16 @@ public sealed class WgcCapture : ICaptureSource
             var frame = sender.TryGetNextFrame();
             if (frame is null) return;
             while (sender.TryGetNextFrame() is { } newer) { frame.Dispose(); frame = newer; }
-            Direct3D11CaptureFrame? replaced;
-            lock (_frameLock) { replaced = _latest; _latest = frame; }
-            replaced?.Dispose();   // never shown — a newer frame superseded it
-            _frameArrived.Set();
+            Direct3D11CaptureFrame? discard;
+            bool current;
+            lock (_frameLock)
+            {
+                current = ReferenceEquals(sender, _activePool);
+                if (current) { discard = _latest; _latest = frame; }
+                else discard = frame;   // the session was stopped meanwhile
+            }
+            discard?.Dispose();   // superseded (never shown) or from a stopped pool
+            if (current) _frameArrived.Set();
         }
         catch (ObjectDisposedException) { /* pool/session torn down concurrently */ }
         catch (System.Runtime.InteropServices.COMException) { /* same, surfaced as an RO error */ }
@@ -127,6 +138,7 @@ public sealed class WgcCapture : ICaptureSource
     private void StopSession()
     {
         if (_framePool != null) _framePool.FrameArrived -= OnFrameArrived;
+        lock (_frameLock) _activePool = null;   // from here on no callback can fill the slot
         DropLatest();   // frames belong to the pool → release before disposing it
         try { _session?.Dispose(); } catch { /* already closed */ }
         try { _framePool?.Dispose(); } catch { }

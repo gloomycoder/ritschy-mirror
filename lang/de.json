@@ -153,6 +153,7 @@
   "display.primary": "Hauptmonitor",
   "error.target_is_primary": "Der Ausgabe-Monitor ist der Hauptmonitor — bitte einen Zweitmonitor wählen (der Spiegel würde den Desktop verdecken)",
   "error.recovery_failed": "Spiegelung ließ sich nach mehreren Versuchen nicht wiederherstellen — gestoppt.",
+  "error.still_stopping": "Die vorherige Spiegelung wird noch beendet — bitte gleich erneut versuchen.",
   "error.no_window_selected": "Kein Aufnahmeziel ausgewählt",
   "error.no_capturable_windows": "Keine aufnehmbaren Fenster gefunden",
   "error.window_not_found": "Fenster '{0}' nicht gefunden (läuft die Anwendung?)",

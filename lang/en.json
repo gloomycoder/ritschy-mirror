@@ -153,6 +153,7 @@
   "display.primary": "primary monitor",
   "error.target_is_primary": "The output monitor is the primary monitor — pick a secondary monitor (the mirror would cover your desktop)",
   "error.recovery_failed": "Mirroring could not be recovered after several attempts — stopped.",
+  "error.still_stopping": "The previous mirror session is still shutting down — try again in a moment.",
   "error.no_window_selected": "No capture target selected",
   "error.no_capturable_windows": "No capturable windows found",
   "error.window_not_found": "Window '{0}' not found (is the application running?)",

@@ -18,6 +18,12 @@ namespace RitschyMirror;
 /// in the queue is played out (padded with silence) before priming again; nothing is held back to
 /// surface late in front of the next sound.
 /// </summary>
+/// <summary>Drift-compensation figures over one soak interval (see <see cref="DriftCompensator.TakeStats"/>).</summary>
+/// <param name="Active">Audio was played (not only priming/silence) during the interval.</param>
+/// <param name="Starts">Times playback (re)started after silence.</param>
+internal readonly record struct DriftStats(bool Active, double AvgMs, double MinMs, double MaxMs,
+    double Ratio, double MinRatio, double MaxRatio, int Starts);
+
 internal sealed class DriftCompensator : ISampleProvider
 {
     public const double TargetLatencyMs = 40;
@@ -39,6 +45,11 @@ internal sealed class DriftCompensator : ISampleProvider
     private bool _priming = true;
     private double _primeWaitMs;                  // time spent priming since data arrived
     private double _avgMs = TargetLatencyMs;
+
+    // Soak statistics since the last TakeStats() (playback thread writes, a logger reads).
+    private readonly object _statsGate = new();
+    private double _minMs = double.MaxValue, _maxMs, _minRatio = double.MaxValue, _maxRatio;
+    private int _starts;
 
     /// <summary>Current playback ratio (input frames per output frame), for diagnostics.</summary>
     public double Ratio { get; private set; } = 1.0;
@@ -69,6 +80,7 @@ internal sealed class DriftCompensator : ISampleProvider
             _primeWaitMs = 0;
             _inFrames = 0; _realEnd = 0; _pos = 1;   // fresh start: one frame of history is primed below
             _avgMs = queuedMs;
+            lock (_statsGate) _starts++;
         }
 
         _avgMs += Smoothing * (queuedMs - _avgMs);
@@ -80,6 +92,7 @@ internal sealed class DriftCompensator : ISampleProvider
         double realLeft = QueuedFrames() + Math.Max(0, _realEnd - _pos);
         bool draining = realLeft < outFrames * ratio + LookAheadFrames;
         if (draining) ratio = 1.0;
+        else RecordStats(queuedMs, ratio);   // the tail of a sound would skew the range
         Ratio = ratio;
 
         for (int f = 0; f < outFrames; f++)
@@ -98,6 +111,28 @@ internal sealed class DriftCompensator : ISampleProvider
         }
         if (draining && _pos >= _realEnd) _priming = true;   // every real sample has been played
         return buffer.Length;
+    }
+
+    private void RecordStats(double queuedMs, double ratio)
+    {
+        lock (_statsGate)
+        {
+            _minMs = Math.Min(_minMs, queuedMs); _maxMs = Math.Max(_maxMs, queuedMs);
+            _minRatio = Math.Min(_minRatio, ratio); _maxRatio = Math.Max(_maxRatio, ratio);
+        }
+    }
+
+    /// <summary>Figures since the previous call (resets them); safe from any thread.</summary>
+    public DriftStats TakeStats()
+    {
+        lock (_statsGate)
+        {
+            bool active = _maxRatio > 0;
+            var stats = new DriftStats(active, _avgMs, active ? _minMs : 0, _maxMs,
+                Ratio, active ? _minRatio : 0, _maxRatio, _starts);
+            _minMs = double.MaxValue; _maxMs = 0; _minRatio = double.MaxValue; _maxRatio = 0; _starts = 0;
+            return stats;
+        }
     }
 
     /// <summary>Whole frames waiting in the capture queue (same frame count as the converted stream).</summary>

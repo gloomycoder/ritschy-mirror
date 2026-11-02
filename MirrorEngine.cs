@@ -46,6 +46,7 @@ public sealed class MirrorEngine
     private readonly object _gate = new();
     private Thread? _thread;
     private volatile bool _stop;
+    private const int StopJoinTimeoutMs = 4000;
     // User-facing error, kept as key + args so the UI shows it in the current language.
     private volatile LocalizedText? _lastError;
     public string LastError => _lastError?.Text ?? "";
@@ -98,7 +99,17 @@ public sealed class MirrorEngine
     {
         lock (_gate)
         {
-            if (IsRunning) return;
+            if (IsRunning)
+            {
+                // Stop() timed out and the old session is still tearing down. A second render thread
+                // would share the stop flag, the output window and the audio mirror with it → refuse.
+                if (_stop)
+                {
+                    _lastError = new LocalizedText("error.still_stopping");
+                    Log("Start refused: " + _lastError.English);
+                }
+                return;
+            }
             _stop = false;
             _lastError = null;
             _thread = new Thread(RenderThreadMain) { IsBackground = true, Name = "MirrorRender" };
@@ -111,9 +122,10 @@ public sealed class MirrorEngine
     {
         Thread? t;
         lock (_gate) { _stop = true; t = _thread; }
-        if (t != null && t.IsAlive && Thread.CurrentThread != t)
-            t.Join(4000);
-        lock (_gate) { _thread = null; }
+        if (t != null && t.IsAlive && Thread.CurrentThread != t && !t.Join(StopJoinTimeoutMs))
+            Log($"WARNING: render thread did not stop within {StopJoinTimeoutMs} ms — Start is refused until it has finished.");
+        // Keep a thread that is still alive: IsRunning stays true and Start() cannot overlap it.
+        lock (_gate) { if (_thread is { IsAlive: false }) _thread = null; }
     }
 
     public void Restart() { Stop(); Start(); }
@@ -198,6 +210,7 @@ public sealed class MirrorEngine
     private const int AcquireTimeoutMs = 16;     // unpaced: wait this long for a new source frame
     private const long ConfigPollMs = 250;       // mtime poll of mirror_config.json
     private const long HdrPollMs = 4000;         // re-read the source's HDR state
+    private const long SoakLogMs = 60_000;       // long-run health line (rates, memory, audio drift)
 
     private void RenderThreadMain()
     {
@@ -239,6 +252,19 @@ public sealed class MirrorEngine
         }
         Audio.SetDesired(false, "", new MirrorConfig());  // audio keeps running across a reinit, but not past the mirror
         Log("Render thread finished.");
+    }
+
+    /// <summary>
+    /// Soak log, once per <see cref="SoakLogMs"/>: frame rates, memory and handles over the interval,
+    /// then the audio mirror's drift figures — a long run shows slow leaks or clock drift in the log.
+    /// </summary>
+    private void LogSoak(long intervalMs, long captured, long presented)
+    {
+        double sec = intervalMs / 1000.0;
+        using var proc = Process.GetCurrentProcess();
+        Log($"Soak video {sec:0} s: capture {captured / sec:0.0} fps, output {presented / sec:0.0} fps; " +
+            $"private {proc.PrivateMemorySize64 >> 20} MB, GC heap {GC.GetTotalMemory(false) >> 20} MB, {proc.HandleCount} handles.");
+        Audio.LogStats((int)Math.Round(sec));
     }
 
     /// <summary>Sleep that aborts immediately on Stop() (50 ms tick) — so a backoff does not
@@ -460,6 +486,7 @@ public sealed class MirrorEngine
 
             var clock = Stopwatch.StartNew();
             long nextCfgPollMs = ConfigPollMs, nextHdrPollMs = HdrPollMs;
+            long lastSoakMs = 0, soakCaptured = 0, soakPresented = 0, captured = 0;
             bool dirty = true;  // something other than a new source frame needs a redraw
             bool overlayFailed = false;
             long presented = 0;
@@ -509,6 +536,12 @@ public sealed class MirrorEngine
                     }
                 }
 
+                if (nowMs - lastSoakMs >= SoakLogMs)
+                {
+                    LogSoak(nowMs - lastSoakMs, captured - soakCaptured, presented - soakPresented);
+                    lastSoakMs = nowMs; soakCaptured = captured; soakPresented = presented;
+                }
+
                 // Frame pacing. VSync on or no limit: block until the source delivers a new frame (or
                 // the timeout). target_fps with VSync off: sleep until the next slot, THEN take whatever
                 // is newest — the capture keeps only the latest image, so a slot never shows a stale frame.
@@ -542,7 +575,7 @@ public sealed class MirrorEngine
                     dirty = true;
                     continue;  // fresh duplication → next round acquires cleanly again
                 }
-                if (newFrame) _captureFps.Tick();
+                if (newFrame) { _captureFps.Tick(); captured++; }
 
                 // FPS readout: rates are published once per second; re-rasterise only when they change.
                 bool ratesChanged = _captureFps.Update() | _outputFps.Update();
@@ -567,7 +600,7 @@ public sealed class MirrorEngine
                 if (capture.Srv == null || !(newFrame || dirty)) continue;
 
                 renderer.Render(capture, cfg);
-            _unscaled = renderer.Unscaled;
+                _unscaled = renderer.Unscaled;
                 if (showOverlay) renderer.DrawOverlay(overlay, cfg.FpsOverlayPosition);
                 renderer.Present(cfg.Vsync);
                 _outputFps.Tick();
