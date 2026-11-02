@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.3 — selectable scale filter (area, bicubic, Lanczos)
 
 - **Selectable scale filter** (`scale_filter`, live): Bilinear (default, as before), Area (box
   average), Bicubic (Mitchell), Bicubic sharp (Catmull-Rom), Lanczos 2 and Lanczos 3. Quality

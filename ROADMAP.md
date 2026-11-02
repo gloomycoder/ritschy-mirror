@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.3 ✓
+
+- **Selectable scale filter** — Bilinear, Area, Bicubic (Mitchell / Catmull-Rom), Lanczos 2/3 as a
+  two-pass linear-light resample; never applied at 1:1.
+
 ## Done in v1.4.2 ✓
 
 - **Primary monitor excluded as target** (listed dimmed, unselectable; refused at start) — the tray

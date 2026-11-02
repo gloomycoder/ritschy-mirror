@@ -11,7 +11,7 @@
 ; ============================================================================
 
 #define MyAppName "RitschyMirror"
-#define MyAppVersion "1.4.2"
+#define MyAppVersion "1.4.3"
 #define MyAppPublisher "RitschyRigz"
 #define MyAppURL "https://github.com/gloomycoder/ritschy-mirror"
 #define MyAppExeName "RitschyMirror.exe"
