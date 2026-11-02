@@ -134,9 +134,9 @@ format. The rates are also in `GET /status` (`capture_fps`, `output_fps`).
   and the ratio range since the previous call (the tail of a sound is left out), plus restarts after
   silence; `AudioSourceChannel` adds its emergency trims. The engine logs them once a minute.
 - **Cleanup** — `StopPipeline` releases every source, the player and the endpoint independently
-  (errors logged, never thrown: it runs inside the worker's catch/finally). An exception that
-  still escapes the worker loop is caught there, sets the status and ends the worker; the next
-  `SetDesired()` with a change starts a new one.
+  (errors logged, never thrown: it runs inside the worker's catch/finally). Any other exception in
+  a worker iteration is handled like a failed start — pipeline dropped, retry on the back-off
+  (at least 1 s, so a failing wait can't spin) — and the worker stays alive until `Dispose()`.
 - **Output** — `audio_output_id` if set, otherwise the target monitor's endpoint by EDID name.
 - **Retry** — a (re)start that throws (device not ready, exclusive use by another app) is retried
   by the worker on a 1 s → 30 s back-off; a success resets it. Gain = group dB (`audio_render_gain_db` / `audio_capture_gain_db`) + source dB,

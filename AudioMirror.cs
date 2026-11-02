@@ -106,7 +106,7 @@ public sealed class AudioMirror : IDisposable
             foreach (var ch in _channels) ch.SetGain(GainFor(ch.ConfigKey, ch.IsRender));
         }
         if (!rebuild) return;
-        if (enabled && _worker is not { IsAlive: true })   // not started yet, or ended by a crash
+        if (enabled && _worker is null)
         {
             _worker = new Thread(WorkerMain) { IsBackground = true, Name = "AudioMirror" };
             _worker.Start();
@@ -130,33 +130,44 @@ public sealed class AudioMirror : IDisposable
             int retryMs = 0;   // > 0: the last attempt failed → try again after this long
             while (!_disposed)
             {
-                bool signalled = retryMs > 0 ? _wake.WaitOne(retryMs) : _wake.WaitOne();
-                // Debounce: a default-device switch fires several notifications back to back.
-                if (signalled) while (!_disposed && _wake.WaitOne(DebounceMs)) { }
-                if (_disposed) break;
                 try
                 {
-                    Reevaluate();
-                    if (retryMs > 0) _log("Audio mirror: recovered.");
-                    retryMs = 0;
+                    bool signalled = retryMs > 0 ? _wake.WaitOne(retryMs) : _wake.WaitOne();
+                    // Debounce: a default-device switch fires several notifications back to back.
+                    if (signalled) while (!_disposed && _wake.WaitOne(DebounceMs)) { }
+                    if (_disposed) break;
+                    try
+                    {
+                        Reevaluate();
+                        if (retryMs > 0) _log("Audio mirror: recovered.");
+                        retryMs = 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        // E.g. the device isn't ready yet after an error, or another app holds it in
+                        // exclusive mode. It may come back without any notification → retry on a timer.
+                        retryMs = retryMs == 0 ? RetryMinMs : Math.Min(retryMs * 2, RetryMaxMs);
+                        _log($"Audio mirror: start failed ({ex.Message}) — retrying in {retryMs / 1000} s.");
+                        StopPipeline();
+                        SetStatus(AudioMirrorState.Unavailable, new LocalizedText("audio.status.retrying", ex.Message, retryMs / 1000));
+                    }
                 }
                 catch (Exception ex)
                 {
-                    // E.g. the device isn't ready yet after an error, or another app holds it in
-                    // exclusive mode. It may come back without any notification → retry on a timer.
-                    retryMs = retryMs == 0 ? RetryMinMs : Math.Min(retryMs * 2, RetryMaxMs);
-                    _log($"Audio mirror: start failed ({ex.Message}) — retrying in {retryMs / 1000} s.");
-                    StopPipeline();
-                    SetStatus(AudioMirrorState.Unavailable, new LocalizedText("audio.status.retrying", ex.Message, retryMs / 1000));
+                    // Last resort — an exception escaping a background thread ends the whole process.
+                    // Handle it like a failed start: keep the worker, drop the pipeline and retry on
+                    // the back-off, so audio comes back without a config change or mirror restart.
+                    retryMs = Math.Max(retryMs, RetryMinMs);
+                    try
+                    {
+                        _log($"Audio mirror: unexpected error — retrying in {retryMs / 1000} s. {ex}");
+                        StopPipeline();
+                        SetStatus(AudioMirrorState.Unavailable, new LocalizedText("audio.status.retrying", ex.Message, retryMs / 1000));
+                    }
+                    catch { /* even reporting failed — the retry below still runs */ }
+                    Thread.Sleep(RetryMinMs);   // never spin if the wait itself keeps failing
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            // Last resort: an exception escaping a background thread ends the whole process.
-            // The next SetDesired() that changes something starts a fresh worker.
-            _log("Audio mirror worker failed: " + ex);
-            SetStatus(AudioMirrorState.Unavailable, new LocalizedText("error.raw", ex.Message));
         }
         finally
         {
@@ -165,7 +176,6 @@ public sealed class AudioMirror : IDisposable
             TryDispose(_enumerator, "enumerator");
             _notify = null;
             _enumerator = null;
-            lock (_gate) _compositionKey = "";   // so the next SetDesired() rebuilds
         }
     }
 

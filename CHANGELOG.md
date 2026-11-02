@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Audio recovers by itself after an unexpected error.** The audio worker's last-resort handler
+  no longer ends the worker (which left audio off until a config change or a mirror restart); it
+  releases the pipeline and retries on the normal 1 s → 30 s back-off.
+
 ## v1.4.8 — stability: no overlapping render threads, crash-safe audio cleanup, soak log
 
 - **Fixed: two render threads could run at once.** If a stop took longer than 4 s, the engine
