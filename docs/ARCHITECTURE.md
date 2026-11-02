@@ -127,8 +127,9 @@ format. The rates are also in `GET /status` (`capture_fps`, `output_fps`).
   48 kHz (`WdlResamplingSampleProvider`) → `VolumeSampleProvider` → `MixingSampleProvider` →
   `WasapiPlayer`.
 - **Drift** — `DriftCompensator` holds the queue at ~40 ms with a smoothed proportional rate
-  (±0.5 % max, 4-point Hermite); empty queue (loopback is silent) → output silence and re-prime to
-  the target. Only a runaway queue (≥ 300 ms, playback stalled) is cut back on the capture thread.
+  (±0.5 % max, 4-point Hermite). When a source stops (loopback sends nothing during silence) the
+  rest of its queue is played out, then it re-primes to the target — waiting at most 40 ms after
+  data arrives, so a short click that never fills the target still plays. Only a runaway queue (≥ 300 ms, playback stalled) is cut back on the capture thread.
 - **Output** — `audio_output_id` if set, otherwise the target monitor's endpoint by EDID name.
 - **Retry** — a (re)start that throws (device not ready, exclusive use by another app) is retried
   by the worker on a 1 s → 30 s back-off; a success resets it. Gain = group dB (`audio_render_gain_db` / `audio_capture_gain_db`) + source dB,

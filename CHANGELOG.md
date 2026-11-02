@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Fixed: short sounds could get stuck in the audio mirror.** After silence a source waited for
+  40 ms of audio before playing; a short sound (a click) followed by silence never reached that, so
+  it stayed queued and could surface late in front of the next sound. Priming now waits at most
+  40 ms once data has arrived, and when a source stops, the rest of its queue is played out.
+
 ## v1.4.5 — one capture mode + capture target
 
 - **Simpler capture setup:** one **capture mode** list — Monitor (DXGI), Monitor (WGC), Window (WGC)

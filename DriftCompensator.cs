@@ -11,9 +11,12 @@ namespace RitschyMirror;
 /// sets the playback ratio to 1 ± (excess latency × gain), capped at ±0.5 % — far below anything
 /// audible, but enough to pull 40 ms of excess back in ~8 s. Interpolation is 4-point Hermite.
 ///
-/// Loopback capture sends nothing while the device is silent, so after a pause the queue is empty:
-/// the compensator then outputs silence ("priming") until the queue holds the target latency again,
-/// rather than starting with a half-empty queue that would crackle.
+/// Loopback capture sends nothing while the device is silent, so a stream regularly stops and
+/// restarts. On a restart the compensator outputs silence ("priming") until the queue holds the
+/// target latency — but for at most <see cref="MaxPrimeWaitMs"/> once data has arrived, so a short
+/// sound (a click) that never fills the target still plays. When the stream stops, whatever is left
+/// in the queue is played out (padded with silence) before priming again; nothing is held back to
+/// surface late in front of the next sound.
 /// </summary>
 internal sealed class DriftCompensator : ISampleProvider
 {
@@ -22,6 +25,7 @@ internal sealed class DriftCompensator : ISampleProvider
     private const double MaxRatioDeviation = 0.005;
     private const double Smoothing = 0.05;        // EMA weight per read (~every 10 ms)
     private const int MinReadFrames = 256;         // upstream read granularity
+    private const double MaxPrimeWaitMs = TargetLatencyMs;   // start anyway after this long
 
     private readonly ISampleProvider _source;
     private readonly BufferedWaveProvider _queue;
@@ -31,6 +35,7 @@ internal sealed class DriftCompensator : ISampleProvider
     private int _inFrames;                        // valid frames in _in
     private double _pos;                          // read position in _in (frames)
     private bool _priming = true;
+    private double _primeWaitMs;                  // time spent priming since data arrived
     private double _avgMs = TargetLatencyMs;
 
     /// <summary>Current playback ratio (input frames per output frame), for diagnostics.</summary>
@@ -55,21 +60,24 @@ internal sealed class DriftCompensator : ISampleProvider
 
         if (_priming)
         {
-            if (queuedMs < TargetLatencyMs) { buffer.Clear(); return buffer.Length; }
+            if (queuedMs <= 0) { _primeWaitMs = 0; buffer.Clear(); return buffer.Length; }
+            _primeWaitMs += neededMs;
+            if (queuedMs < TargetLatencyMs && _primeWaitMs < MaxPrimeWaitMs) { buffer.Clear(); return buffer.Length; }
             _priming = false;
+            _primeWaitMs = 0;
             _inFrames = 0; _pos = 1;   // fresh start: one frame of history is primed below
             _avgMs = queuedMs;
         }
-        else if (queuedMs < neededMs)
-        {
-            // Underrun (source went silent / stalled): pause cleanly and re-prime to the target.
-            _priming = true;
-            buffer.Clear();
-            return buffer.Length;
-        }
 
-        _avgMs += Smoothing * (queuedMs - _avgMs);
-        double ratio = 1.0 + Math.Clamp((_avgMs - TargetLatencyMs) * RatioPerMs, -MaxRatioDeviation, MaxRatioDeviation);
+        // Fewer samples queued than this read needs → the source stopped (or stalled): play out what
+        // is left — the queue pads the rest with silence — and re-prime for the next sound.
+        bool draining = queuedMs < neededMs;
+        double ratio = 1.0;
+        if (!draining)
+        {
+            _avgMs += Smoothing * (queuedMs - _avgMs);
+            ratio = 1.0 + Math.Clamp((_avgMs - TargetLatencyMs) * RatioPerMs, -MaxRatioDeviation, MaxRatioDeviation);
+        }
         Ratio = ratio;
 
         for (int f = 0; f < outFrames; f++)
@@ -86,6 +94,7 @@ internal sealed class DriftCompensator : ISampleProvider
             }
             _pos += ratio;
         }
+        if (draining) _priming = true;
         return buffer.Length;
     }
 
