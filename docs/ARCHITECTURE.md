@@ -53,8 +53,9 @@ affect an HDR source**; with an SDR source only exposure/saturation/contrast/gam
 `InputIsHdr` is re-read at runtime via `ICaptureSource.RefreshSourceState()` — periodically from
 the render loop and after every `Recover()`, since a display mode change (HDR on/off is one) is
 the most common cause of capture loss. Toggling HDR therefore no longer needs a render restart.
-`WindowCapture` implements it as a no-op: its HDR state comes from the monitor the window sat on
-at start, and the window selection is a structural parameter anyway.
+`WgcCapture` re-reads the monitor's colour space for monitor capture; for window capture it is a
+no-op — the HDR state comes from the monitor the window sat on at start, and the window selection
+is a structural parameter anyway.
 
 ## Capture sources
 
@@ -64,9 +65,14 @@ Everything downstream —
 tonemap, layout, crop, present — is identical regardless of source, so adding a source type
 doesn't touch the renderer or the engine loop. `capture_mode` (structural) selects which:
 
-- **`monitor`** (default) — `DuplicationCapture`: whole-monitor **DXGI Desktop Duplication**, as
-  above. The render device is created on the *source* adapter (Duplication is adapter-bound).
-- **`window`** — `WindowCapture`: a single window / fullscreen app via **Windows.Graphics.Capture
+- **`monitor`** (default) — a whole monitor, through the API chosen by `monitor_api` (structural):
+  - `dxgi` (default) — `DuplicationCapture`: **DXGI Desktop Duplication**, as above. The render
+    device is created on the *source* adapter (Duplication is adapter-bound). Lowest overhead; the
+    cursor is composited by the renderer.
+  - `wgc` — `WgcCapture.ForMonitor`: **Windows.Graphics.Capture** of the monitor (HMONITOR from the
+    DXGI output). Device on the *target* adapter, the DWM bridges GPUs; cursor composited by WGC;
+    HDR re-read live via a probe of the output's colour space. Same frame handling as below.
+- **`window`** — `WgcCapture.ForWindow`: a single window / fullscreen app via **Windows.Graphics.Capture
   (WGC)** — the same OS API behind OBS' "Windows 10 (1903+)" window capture, *not* injection.
   Frames arrive as `R16G16B16A16_Float` D3D11 textures (free-threaded frame pool, polled with
   `TryGetNextFrame` from the render thread) → copied into the same shader-readable SRV the
@@ -92,7 +98,7 @@ The render loop (`MirrorEngine.RunSession`) has two pacing modes:
   something else changed (live config, HDR state, FPS readout). The flip-model swap chain keeps
   showing the last frame, so a static desktop costs almost no GPU time.
 - **Newest frame first.** Desktop Duplication always returns the accumulated latest image. WGC
-  queues frames oldest-first, so `WindowCapture.TakeNewestFrame` drains the pool and keeps only the
+  queues frames oldest-first, so `WgcCapture.TakeNewestFrame` drains the pool and keeps only the
   last one; it waits on the pool's `FrameArrived` event instead of spinning.
 - **`FramePacer`** uses a high-resolution waitable timer (`CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`,
   Win10 1803+; plain waitable timer before that), advances deadlines on a fixed grid and re-anchors
@@ -209,7 +215,7 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 | `Renderer.cs` | Swap chain + layout/crop geometry + shader pipeline (consumes `ICaptureSource`) |
 | `ICaptureSource.cs` | Capture-source seam (FP16 SRV + size/HDR/cursor + acquire/recover/refresh) |
 | `Capture.cs` | `DuplicationCapture` — DXGI Desktop Duplication (incl. optional cursor compositing) |
-| `WindowCapture.cs` | `WindowCapture` — single window / fullscreen app via Windows.Graphics.Capture |
+| `WgcCapture.cs` | `WgcCapture` — window / fullscreen app or whole monitor via Windows.Graphics.Capture |
 | `WindowEnum.cs` | Enumerate capturable windows + resolve a saved window by stable identity (exe+title) |
 | `Shaders.cs` | HLSL (tonemap + crop UV + cursor blend) |
 | `FramePacer.cs` | High-resolution waitable-timer pacing for `target_fps` |
@@ -252,7 +258,7 @@ on the render thread. It's set once the render loop actually starts (after sourc
 resolve), toggled live on config reload, and cleared on stop — and because the hold is bound to
 the render thread, Windows releases it automatically if that thread ever exits.
 
-**Structural keys** (need a render restart): `output_bit_depth`, `capture_mode`, `window_exe`,
+**Structural keys** (need a render restart): `output_bit_depth`, `capture_mode`, `monitor_api`, `window_exe`,
 `window_title`, `source_display`, `target_display`, `output_mode`, `windowed`, `window_width`,
 `window_height`, `output_width`, `output_height`.
 

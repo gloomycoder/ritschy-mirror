@@ -6,7 +6,7 @@ namespace RitschyMirror;
 /// Common interface for an image source that the <see cref="Renderer"/> mirrors —
 /// regardless of HOW the image is produced. Two implementations:
 ///   • <see cref="DuplicationCapture"/> — a whole monitor (DXGI Desktop Duplication).
-///   • <see cref="WindowCapture"/>      — a single window / a fullscreen app
+///   • <see cref="WgcCapture"/>         — a single window / a fullscreen app, or a whole monitor (WGC)
 ///                                         (Windows.Graphics.Capture, like OBS' window capture).
 ///
 /// The renderer only consumes this seam (one FP16 SRV + dimensions + cursor info); the whole

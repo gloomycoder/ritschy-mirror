@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Monitor capture: choose DXGI or WGC** (`monitor_api`). DXGI Desktop Duplication stays the
+  default (lowest overhead); Windows.Graphics.Capture is now available for whole monitors too —
+  it works across GPUs and lets Windows draw the cursor. Selectable in Settings and the dock.
+
 - **Audio recovers on its own after a failed restart.** If the output can't be reopened — not ready
   yet after an error, or held in exclusive mode by another app — the audio mirror now retries with
   back-off (1 s → 30 s) instead of waiting for a device notification that may never come.

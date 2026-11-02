@@ -53,6 +53,8 @@ sends the result to the display your capture card is plugged into.
 
 - 🎯 **Pick source & target monitor** from dropdowns — real monitor names (e.g. *AORUS FO32U2P*),
   HDR-aware, multi-GPU aware (source and target may even hang off **different graphics cards**).
+- 🧭 **Choose the monitor capture API** — DXGI Desktop Duplication (default, lowest overhead) or
+  Windows.Graphics.Capture (works across GPUs, cursor drawn by Windows).
 - 🪟 **Or mirror a single window / fullscreen app** instead of a whole monitor — pick one app
   (e.g. just your game). Only that window is shown, so **alt-tabbing never flashes your desktop**
   into the capture card. Built on Windows.Graphics.Capture (the modern OS API, *not* injection →

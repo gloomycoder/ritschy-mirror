@@ -70,6 +70,9 @@ public sealed class MirrorConfig
     //               "window"  (a window / a fullscreen app via Windows.Graphics.Capture).
     // In window mode ONLY the window is mirrored → the desktop stays invisible when alt-tabbing out.
     [JsonPropertyName("capture_mode")]     public string CaptureMode { get; set; } = "monitor";
+    // Monitor capture API (capture_mode="monitor"): "dxgi" (Desktop Duplication, default) |
+    // "wgc" (Windows.Graphics.Capture — cross-GPU, cursor composited by Windows).
+    [JsonPropertyName("monitor_api")]      public string MonitorApi { get; set; } = "dxgi";
     // Window identity (only capture_mode="window"): exe (primary, stable) + title (secondary, to
     // tell apart multiple windows of the same exe). Analogous to the replug-proof monitor identity.
     [JsonPropertyName("window_exe")]       public string WindowExe { get; set; } = "";
@@ -133,6 +136,10 @@ public sealed class MirrorConfig
     /// <summary>Frame limit actually in effect: only with VSync off (0 = unlimited / VSync paces).</summary>
     public int EffectiveTargetFps => Vsync || TargetFps <= 0 ? 0 : Math.Clamp(TargetFps, MinTargetFps, MaxTargetFps);
 
+    /// <summary>Effective monitor capture API: "wgc" or (default) "dxgi".</summary>
+    public string ResolveMonitorApi()
+        => (MonitorApi ?? "").Trim().ToLowerInvariant() == "wgc" ? "wgc" : "dxgi";
+
     /// <summary>Effective source mode: "window" or (default) "monitor".</summary>
     public string ResolveCaptureMode()
         => (CaptureMode ?? "").Trim().ToLowerInvariant() == "window" ? "window" : "monitor";
@@ -152,7 +159,7 @@ public sealed class MirrorConfig
         "source_key", "source_label", "target_key", "target_label",
         "output_mode", "windowed",
         "window_width", "window_height", "output_width", "output_height",
-        "capture_mode", "window_exe", "window_title",
+        "capture_mode", "monitor_api", "window_exe", "window_title",
     };
     public static IEnumerable<string> AllKeys => LiveKeys.Concat(StructKeys);
 

@@ -11,7 +11,11 @@ using WinRT;
 namespace RitschyMirror;
 
 /// <summary>
-/// Capture of ONE window / fullscreen application via <b>Windows.Graphics.Capture</b> (WGC) —
+/// Capture via <b>Windows.Graphics.Capture</b> (WGC) — of ONE window / fullscreen application
+/// (<see cref="ForWindow"/>), or of a whole monitor (<see cref="ForMonitor"/>, the alternative to
+/// DXGI Desktop Duplication: works across GPUs, cursor composited by Windows).
+///
+/// Window capture uses
 /// the same OS API that OBS' "Window Capture (Windows 10 1903+)" uses. Unlike OBS' "Game
 /// Capture", NOTHING is injected into the game process (no anti-cheat risk, no elevation
 /// problems): WGC pulls the image from the DWM compositor. This also makes it robust across GPUs
@@ -23,7 +27,7 @@ namespace RitschyMirror;
 /// Security property: ONLY the window content is mirrored — if you tab out, the
 /// app keeps running in the background and the stream still shows it, NOT your desktop.
 /// </summary>
-public sealed class WindowCapture : ICaptureSource
+public sealed class WgcCapture : ICaptureSource
 {
     private readonly ID3D11Device _device;
     private readonly IDirect3DDevice _d3dDevice;   // WinRT view of the same D3D11 device
@@ -48,7 +52,8 @@ public sealed class WindowCapture : ICaptureSource
 
     public int Width { get; private set; }
     public int Height { get; private set; }
-    public bool InputIsHdr { get; }
+    public bool InputIsHdr { get; private set; }
+    private readonly Func<bool>? _hdrProbe;   // monitor capture: re-reads the monitor's HDR state
     public ID3D11ShaderResourceView? Srv => _srv;
 
     // Window capture already bakes the cursor (if enabled) into the frame → the renderer's separate cursor pass
@@ -60,14 +65,23 @@ public sealed class WindowCapture : ICaptureSource
     public int CursorH => 0;
     public ID3D11ShaderResourceView? CursorSrv => null;
 
-    public WindowCapture(ID3D11Device device, IntPtr hwnd, bool inputIsHdr, bool showCursor)
+    /// <summary>One window / fullscreen app. <paramref name="inputIsHdr"/>: the monitor it sits on.</summary>
+    public static WgcCapture ForWindow(ID3D11Device device, IntPtr hwnd, bool inputIsHdr, bool showCursor) =>
+        new(device, CreateItem(hwnd, forMonitor: false), inputIsHdr, null, showCursor);
+
+    /// <summary>A whole monitor (HMONITOR); <paramref name="hdrProbe"/> reads its current HDR state.</summary>
+    public static WgcCapture ForMonitor(ID3D11Device device, IntPtr hmonitor, Func<bool> hdrProbe, bool showCursor) =>
+        new(device, CreateItem(hmonitor, forMonitor: true), hdrProbe(), hdrProbe, showCursor);
+
+    private WgcCapture(ID3D11Device device, GraphicsCaptureItem item, bool inputIsHdr, Func<bool>? hdrProbe, bool showCursor)
     {
         _device = device;
         InputIsHdr = inputIsHdr;
+        _hdrProbe = hdrProbe;
         _showCursor = showCursor;
         _d3dDevice = CreateDirect3DDevice(device);
-        _item = CreateItemForWindow(hwnd);
-        _item.Closed += (_, _) => _sourceLost = true;
+        _item = item;
+        _item.Closed += (_, _) => _sourceLost = true;   // window closed / monitor disconnected
         StartSession();
     }
 
@@ -137,7 +151,7 @@ public sealed class WindowCapture : ICaptureSource
     public bool TryAcquire(ID3D11DeviceContext ctx, int timeoutMs = 16)
     {
         if (_sourceLost)
-            throw new InvalidOperationException("Capture window was closed");
+            throw new InvalidOperationException("Capture source (window/monitor) was closed");
 
         var pool = _framePool;
         if (pool is null) return false;
@@ -205,10 +219,15 @@ public sealed class WindowCapture : ICaptureSource
         }
     }
 
-    /// <summary>No-op: the HDR state here comes from the monitor the window was on AT START
-    /// (the window choice is a structural parameter anyway). Window moved to a monitor with a different
-    /// HDR state → render restart. With monitor capture it is tracked live.</summary>
-    public void RefreshSourceState() { }
+    /// <summary>Monitor capture: re-read the monitor's HDR state (toggling HDR needs no restart).
+    /// Window capture: no-op — the HDR state comes from the monitor the window was on AT START (the
+    /// window choice is a structural parameter anyway); moved to another monitor → render restart.</summary>
+    public void RefreshSourceState()
+    {
+        if (_hdrProbe is null) return;
+        try { InputIsHdr = _hdrProbe(); }
+        catch (Exception) { /* output mid mode switch → keep the last known state */ }
+    }
 
     /// <summary>Apply live config: toggle the WGC session's cursor capture without a restart.</summary>
     public void ApplyLiveConfig(MirrorConfig cfg)
@@ -269,12 +288,12 @@ public sealed class WindowCapture : ICaptureSource
         IntPtr GetInterface([In] ref Guid iid);
     }
 
-    private static GraphicsCaptureItem CreateItemForWindow(IntPtr hwnd)
+    private static GraphicsCaptureItem CreateItem(IntPtr handle, bool forMonitor)
     {
         var factory = ActivationFactory.Get("Windows.Graphics.Capture.GraphicsCaptureItem");
         var interop = factory.AsInterface<IGraphicsCaptureItemInterop>();
         Guid iid = GraphicsCaptureItemIid;
-        IntPtr abi = interop.CreateForWindow(hwnd, ref iid);
+        IntPtr abi = forMonitor ? interop.CreateForMonitor(handle, ref iid) : interop.CreateForWindow(handle, ref iid);
         var item = GraphicsCaptureItem.FromAbi(abi);
         Marshal.Release(abi);
         return item;

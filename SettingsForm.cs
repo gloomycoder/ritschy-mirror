@@ -209,7 +209,7 @@ public sealed partial class SettingsForm : Form
 
         string src = _cfg.ResolveCaptureMode() == "window"
             ? (string.IsNullOrWhiteSpace(_cfg.WindowTitle) ? "window" : _cfg.WindowTitle)
-            : LabelOf(_cfg.SourceKey, _cfg.SourceLabel);
+            : LabelOf(_cfg.SourceKey, _cfg.SourceLabel) + (_cfg.ResolveMonitorApi() == "wgc" ? " (WGC)" : "");
         string dst = LabelOf(_cfg.TargetKey, _cfg.TargetLabel);
         string pair = src.Length > 0 || dst.Length > 0 ? $"  ·  {src} → {dst}" : "";
         SetSummary("mirroring", L.T(running ? "summary.running" : "summary.stopped") + pair);
@@ -350,6 +350,10 @@ public sealed partial class SettingsForm : Form
         _srcCombo.SelectedIndexChanged += (_, _) => { if (!_loading) StoreSelection(_srcCombo, src: true); };
         _body.Controls.Add(_srcCombo);
         _y += ROW;
+        ChoiceRow(L.T("settings.monitor_api"),
+                  new[] { ("dxgi", L.T("api.dxgi")), ("wgc", L.T("api.wgc")) },
+                  _cfg.ResolveMonitorApi(), v => _cfg.MonitorApi = v);
+        Note(L.T("settings.monitor_api.note"));
 
         // Window source ("window" mode) — identity-stable via exe + title, like the monitor selection.
         _windows = WindowEnum.List();

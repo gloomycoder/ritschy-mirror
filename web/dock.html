@@ -67,6 +67,11 @@
     <div class="row"><label data-i18n="dock.window">Window</label><select id="window_pick"></select>
       <button class="iconbtn" id="refresh_win" data-i18n-title="dock.refresh_windows" title="Refresh window list">↻</button></div>
     <div class="row"><label data-i18n="dock.src_mon">Source mon.</label><select id="src"></select></div>
+    <div class="row"><label data-i18n="settings.monitor_api">Monitor capture</label>
+      <select id="monitor_api" data-kind="struct">
+        <option value="dxgi" data-i18n="api.dxgi">DXGI Desktop Duplication (default)</option>
+        <option value="wgc" data-i18n="api.wgc">Windows.Graphics.Capture (WGC)</option>
+      </select></div>
     <div class="row"><label data-i18n="dock.dst_mon">Target mon.</label><select id="dst"></select>
       <button class="iconbtn" id="refresh" data-i18n-title="dock.refresh_monitors" title="Refresh monitors">↻</button></div>
     <div class="hint" data-i18n="dock.window_hint">"window" mirrors only the window — the desktop stays hidden when you alt-tab.</div>
@@ -224,6 +229,7 @@ $("target_fps").addEventListener("change", e => {
 
 // ── Struct fields (restart if active) ──
 $("output_mode").addEventListener("change", e => patchStruct({ output_mode: e.target.value }));
+$("monitor_api").addEventListener("change", e => patchStruct({ monitor_api: e.target.value }));
 $("output_bit_depth").addEventListener("change", e => patchStruct({ output_bit_depth: parseInt(e.target.value,10) }));
 $("window_width").addEventListener("change", e => patchStruct({ window_width: parseInt(e.target.value||"1280",10) }));
 $("window_height").addEventListener("change", e => patchStruct({ window_height: parseInt(e.target.value||"720",10) }));
@@ -371,6 +377,7 @@ function applyStatus(st) {
     $("target_fps").value = cfg.target_fps ?? 0;
     $("target_fps").disabled = cfg.vsync !== false;
     if (cfg.capture_mode) $("capture_mode").value = cfg.capture_mode;
+    $("monitor_api").value = cfg.monitor_api === "wgc" ? "wgc" : "dxgi";
     syncMonitorSelection(cfg);
     syncWindowSelection(cfg);
   }

@@ -369,7 +369,7 @@ public sealed class MirrorEngine
                         if (cx >= d.L && cx < d.R && cy >= d.T && cy < d.B) { winHdr = d.Hdr; break; }
                 }
                 Log($"Source = window '{cfg.WindowTitle}' ({cfg.WindowExe}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}, HDR={winHdr}");
-                capture = new WindowCapture(device, hwnd, winHdr, cfg.ShowCursor);
+                capture = WgcCapture.ForWindow(device, hwnd, winHdr, cfg.ShowCursor);
             }
             else
             {
@@ -390,10 +390,24 @@ public sealed class MirrorEngine
                     return (SessionResult.Fatal, 0);
                 }
                 var src = displays[srcIdx];
-                D3D11CreateDevice(src.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
-                    out device, out context).CheckError();
-                Log($"Source = Display {srcIdx} ({src.Name}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
-                capture = new DuplicationCapture(device, src.Output);
+                if (cfg.ResolveMonitorApi() == "wgc")
+                {
+                    // WGC monitor capture: device on the TARGET adapter (same-adapter present); the DWM
+                    // hands the monitor image across adapters, like window capture.
+                    D3D11CreateDevice(dst.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
+                        out device, out context).CheckError();
+                    var srcOutput = src.Output;
+                    Log($"Source = Display {srcIdx} ({src.Name}) via WGC, target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
+                    capture = WgcCapture.ForMonitor(device, srcOutput.Description1.Monitor, () => IsHdr(srcOutput), cfg.ShowCursor);
+                }
+                else
+                {
+                    // DXGI Desktop Duplication is adapter-bound → device on the SOURCE adapter.
+                    D3D11CreateDevice(src.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
+                        out device, out context).CheckError();
+                    Log($"Source = Display {srcIdx} ({src.Name}) via DXGI, target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
+                    capture = new DuplicationCapture(device, src.Output);
+                }
             }
 
             // Window geometry by output_mode (always from the TARGET display)
@@ -580,6 +594,13 @@ public sealed class MirrorEngine
             device?.Dispose();
             CleanupEnum();
         }
+    }
+
+    /// <summary>HDR state of an output from its current colour space (scRGB or HDR10 = HDR).</summary>
+    private static bool IsHdr(IDXGIOutput6 output)
+    {
+        var cs = output.Description1.ColorSpace;
+        return cs == ColorSpaceType.RgbFullG2084NoneP2020 || cs == ColorSpaceType.RgbFullG10NoneP709;
     }
 
     /// <summary>Copy the LIVE keys of a freshly loaded config into the running one.</summary>
