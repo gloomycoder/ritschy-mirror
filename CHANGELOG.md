@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.11 — settings follow audio device changes live, typed gain values
 
 - **The settings window follows device changes live.** When Windows switches the default output or
   input device (or one is plugged in or removed), the audio section updates by itself: only the

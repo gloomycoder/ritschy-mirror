@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.11 ✓
+
+- **Live device list in settings** — the audio section follows default-device and plug changes without
+  a refresh; gains can be typed.
+
 ## Done in v1.4.10 ✓
 
 - **Volume follow per device** — hardware volume followed, software volume (already in the loopback)
