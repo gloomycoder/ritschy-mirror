@@ -300,239 +300,246 @@ public sealed class MirrorEngine
         string captureMode = cfg.ResolveCaptureMode();
 
         var featureLevels = new[] { FeatureLevel.Level_11_1, FeatureLevel.Level_11_0 };
-        ID3D11Device device;
-        ID3D11DeviceContext context;
-        ICaptureSource capture;
+        // Everything created from here on is released in the finally below — also when a step throws
+        // (e.g. shader compile, swap chain). A leaked Desktop Duplication would make every reinit
+        // fail with E_INVALIDARG, because an output can only be duplicated once per process.
+        ID3D11Device? device = null;
+        ID3D11DeviceContext? context = null;
+        ICaptureSource? capture = null;
+        Win32Window? window = null;
+        Renderer? renderer = null;
+        bool exclusive = false, keepAwakeOn = false;
 
-        if (captureMode == "window")
+        try
         {
-            // Window source (WGC): saved identity → current HWND. If the window is missing
-            // (app not open) → clean abort with a plain-text message instead of blindly mirroring something.
-            var (hwnd, winErr) = WindowEnum.Resolve(cfg.WindowExe, cfg.WindowTitle);
-            if (winErr != null || hwnd == IntPtr.Zero)
+
+            if (captureMode == "window")
             {
-                var e = winErr ?? new LocalizedText("error.no_window_selected");
-                Log("Start aborted: " + e.English);
-                _lastError = e;
-                CleanupEnum();
-                return (SessionResult.Fatal, 0);
-            }
-            // Device on the TARGET adapter (same-adapter present); WGC delivers the window image
-            // across adapters via the DWM — exactly what makes it cross-GPU robust.
-            D3D11CreateDevice(dst.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
-                out device, out context).CheckError();
-            // HDR detection: is the window (center point) on an HDR monitor? → tonemap rolls off highlights.
-            bool winHdr = false;
-            if (GetWindowRect(hwnd, out RECT wr))
-            {
-                int cx = (wr.Left + wr.Right) / 2, cy = (wr.Top + wr.Bottom) / 2;
-                foreach (var d in displays)
-                    if (cx >= d.L && cx < d.R && cy >= d.T && cy < d.B) { winHdr = d.Hdr; break; }
-            }
-            Log($"Source = window '{cfg.WindowTitle}' ({cfg.WindowExe}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}, HDR={winHdr}");
-            capture = new WindowCapture(device, hwnd, winHdr, cfg.ShowCursor);
-        }
-        else
-        {
-            // Monitor source (Desktop Duplication, duplication-bound) → device on the SOURCE adapter.
-            var (srcIdx, srcErr) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, isSource: true);
-            if (srcErr != null)
-            {
-                Log("Start aborted: " + srcErr.English);
-                _lastError = srcErr;
-                CleanupEnum();
-                return (SessionResult.Fatal, 0);
-            }
-            var src = displays[srcIdx];
-            D3D11CreateDevice(src.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
-                out device, out context).CheckError();
-            Log($"Source = Display {srcIdx} ({src.Name}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
-            capture = new DuplicationCapture(device, src.Output);
-        }
-
-        // Window geometry by output_mode (always from the TARGET display)
-        bool windowed = mode == "windowed";
-        int x, y, outW, outH; bool borderless;
-        if (windowed)
-        {
-            x = 100; y = 100; outW = cfg.WindowWidth; outH = cfg.WindowHeight; borderless = false;
-        }
-        else
-        {
-            x = dst.L; y = dst.T; outW = dst.R - dst.L; outH = dst.B - dst.T; borderless = true;
-        }
-
-        Log("Step: creating window...");
-        var window = new Win32Window("RitschyMirror", x, y, outW, outH, borderless);
-        Log("Step: renderer/swapchain...");
-        var renderer = new Renderer(factory, device, context, window.Hwnd, outW, outH, cfg.OutputBitDepth);
-        Log($"Capture {capture.Width}x{capture.Height} HDR={capture.InputIsHdr} → output {outW}x{outH} ({(cfg.OutputBitDepth >= 10 ? "10bit" : "8bit")})");
-        Log(capture.InputIsHdr
-            ? $"Source is HDR → tonemapping {(cfg.TonemapEnabled ? "active" : "OFF")} (peak {cfg.SourcePeakNits:F0} nits at white point {cfg.TargetPaperwhite:F0} nits)."
-            : "Source is SDR → 1:1 passthrough, no tonemapping (source_peak_nits/target_paperwhite have no effect here).");
-
-        // Mouse lock / exclusive depending on output_mode
-        bool exclusive = false;
-        if (!windowed && mode == "exclusive")
-        {
-            if (renderer.TrySetExclusiveFullscreen(dst.Output)) { exclusive = true; Log("Exclusive fullscreen active."); }
-            else { Log("Exclusive not possible (cross-adapter?) → falling back to fullscreen_block."); window.EnableCursorBlock(dst.L, dst.T, dst.R, dst.B); }
-        }
-        else if (!windowed && mode == "fullscreen_block")
-        {
-            window.EnableCursorBlock(dst.L, dst.T, dst.R, dst.B);
-            Log("Mouse lock active (fullscreen_block).");
-        }
-
-        // From here on we really mirror → optionally block screen/sleep (auto-release
-        // on stop). Can be toggled live: keep_awake is picked up in the hot reload below.
-        bool keepAwakeOn = false;
-        if (cfg.KeepAwake) { KeepAwakeBegin(); keepAwakeOn = true; }
-
-        DateTime lastCfgWrite = SafeWriteTime();
-        bool lastSrcHdr = capture.InputIsHdr;
-        var sessionResult = SessionResult.Stopped;  // clean default: window closed / Stop()
-
-        using var pacer = new FramePacer();
-        using var overlay = new FpsOverlay(device, outH);
-        _captureFps.Reset();
-        _outputFps.Reset();
-        Audio.SetDesired(cfg.AudioMirror, dst.Friendly);
-        LogFramePacing(cfg);
-
-        var clock = Stopwatch.StartNew();
-        long nextCfgPollMs = ConfigPollMs, nextHdrPollMs = HdrPollMs;
-        bool dirty = true;  // something other than a new source frame needs a redraw
-        bool overlayFailed = false;
-        long presented = 0;
-
-        while (window.Running && !_stop)
-        {
-            window.PumpMessages();
-            long nowMs = clock.ElapsedMilliseconds;
-
-            // Config hot reload (mtime polling). LIVE parameters only; structure needs Restart.
-            if (nowMs >= nextCfgPollMs)
-            {
-                nextCfgPollMs = nowMs + ConfigPollMs;
-                var t = SafeWriteTime();
-                if (t != lastCfgWrite)
+                // Window source (WGC): saved identity → current HWND. If the window is missing
+                // (app not open) → clean abort with a plain-text message instead of blindly mirroring something.
+                var (hwnd, winErr) = WindowEnum.Resolve(cfg.WindowExe, cfg.WindowTitle);
+                if (winErr != null || hwnd == IntPtr.Zero)
                 {
-                    lastCfgWrite = t;
-                    var nc = MirrorConfig.Load(ConfigPath);
-                    bool pacingChanged = nc.EffectiveTargetFps != cfg.EffectiveTargetFps || nc.Vsync != cfg.Vsync;
-                    CopyLiveKeys(nc, cfg);
-                    // Sleep-mode lock on/off live, without a render restart.
-                    if (cfg.KeepAwake && !keepAwakeOn) { KeepAwakeBegin(); keepAwakeOn = true; }
-                    else if (!cfg.KeepAwake && keepAwakeOn) { KeepAwakeEnd(); keepAwakeOn = false; }
-                    // Source-side live parameters (e.g. WGC cursor capture in window mode).
-                    capture.ApplyLiveConfig(cfg);
-                    Audio.SetDesired(cfg.AudioMirror, dst.Friendly);
-                    if (pacingChanged) { pacer.Reset(); LogFramePacing(cfg); }
-                    dirty = true;
-                    Log("Config reloaded (live parameters).");
+                    var e = winErr ?? new LocalizedText("error.no_window_selected");
+                    Log("Start aborted: " + e.English);
+                    _lastError = e;
+                    return (SessionResult.Fatal, 0);
                 }
+                // Device on the TARGET adapter (same-adapter present); WGC delivers the window image
+                // across adapters via the DWM — exactly what makes it cross-GPU robust.
+                D3D11CreateDevice(dst.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
+                    out device, out context).CheckError();
+                // HDR detection: is the window (center point) on an HDR monitor? → tonemap rolls off highlights.
+                bool winHdr = false;
+                if (GetWindowRect(hwnd, out RECT wr))
+                {
+                    int cx = (wr.Left + wr.Right) / 2, cy = (wr.Top + wr.Bottom) / 2;
+                    foreach (var d in displays)
+                        if (cx >= d.L && cx < d.R && cy >= d.T && cy < d.B) { winHdr = d.Hdr; break; }
+                }
+                Log($"Source = window '{cfg.WindowTitle}' ({cfg.WindowExe}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}, HDR={winHdr}");
+                capture = new WindowCapture(device, hwnd, winHdr, cfg.ShowCursor);
+            }
+            else
+            {
+                // Monitor source (Desktop Duplication, duplication-bound) → device on the SOURCE adapter.
+                var (srcIdx, srcErr) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, isSource: true);
+                if (srcErr != null)
+                {
+                    Log("Start aborted: " + srcErr.English);
+                    _lastError = srcErr;
+                    return (SessionResult.Fatal, 0);
+                }
+                var src = displays[srcIdx];
+                D3D11CreateDevice(src.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
+                    out device, out context).CheckError();
+                Log($"Source = Display {srcIdx} ({src.Name}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
+                capture = new DuplicationCapture(device, src.Output);
             }
 
-            // Track HDR on/off at the monitor during operation. Without it the shader keeps
-            // using the wrong source curve after a toggle: HDR source as SDR = blown out,
-            // SDR source as HDR = too dark.
-            if (nowMs >= nextHdrPollMs)
+            // Window geometry by output_mode (always from the TARGET display)
+            bool windowed = mode == "windowed";
+            int x, y, outW, outH; bool borderless;
+            if (windowed)
             {
-                nextHdrPollMs = nowMs + HdrPollMs;
-                capture.RefreshSourceState();
-                if (capture.InputIsHdr != lastSrcHdr)
-                {
-                    lastSrcHdr = capture.InputIsHdr;
-                    dirty = true;
-                    Log(lastSrcHdr
-                        ? "Source switched to HDR → tonemapping path active."
-                        : "Source switched to SDR → 1:1 passthrough, no tonemapping.");
-                }
+                x = 100; y = 100; outW = cfg.WindowWidth; outH = cfg.WindowHeight; borderless = false;
+            }
+            else
+            {
+                x = dst.L; y = dst.T; outW = dst.R - dst.L; outH = dst.B - dst.T; borderless = true;
             }
 
-            // Frame pacing. VSync on or no limit: block until the source delivers a new frame (or
-            // the timeout). target_fps with VSync off: sleep until the next slot, THEN take whatever
-            // is newest — the capture keeps only the latest image, so a slot never shows a stale frame.
-            int fps = cfg.EffectiveTargetFps;
-            bool newFrame;
-            try
-            {
-                if (fps > 0)
-                {
-                    pacer.WaitForNextFrame(fps, () => _stop || !window.Running, window.PumpMessages);
-                    newFrame = capture.TryAcquire(context, 0);
-                }
-                else
-                {
-                    newFrame = capture.TryAcquire(context, AcquireTimeoutMs);
-                }
-            }
-            catch (Exception ex)
-            {
-                // ACCESS_LOST or similar → first a quick recovery of the source (transient case).
-                Log("Capture source lost (" + ex.Message + ") → re-initializing.");
-                if (!TryRecoverCapture(capture))
-                {
-                    // If it stays dead (e.g. device lost, cross-adapter) → do NOT keep spinning,
-                    // abort the session instead → the supervisor rebuilds the whole chain.
-                    Log("Duplication recovery failed → full reinit of the render chain.");
-                    sessionResult = SessionResult.Lost;
-                    break;
-                }
-                pacer.Reset();
-                dirty = true;
-                continue;  // fresh duplication → next round acquires cleanly again
-            }
-            if (newFrame) _captureFps.Tick();
+            Log("Step: creating window...");
+            window = new Win32Window("RitschyMirror", x, y, outW, outH, borderless);
+            Log("Step: renderer/swapchain...");
+            renderer = new Renderer(factory, device, context, window.Hwnd, outW, outH, cfg.OutputBitDepth);
+            Log($"Capture {capture.Width}x{capture.Height} HDR={capture.InputIsHdr} → output {outW}x{outH} ({(cfg.OutputBitDepth >= 10 ? "10bit" : "8bit")})");
+            Log(capture.InputIsHdr
+                ? $"Source is HDR → tonemapping {(cfg.TonemapEnabled ? "active" : "OFF")} (peak {cfg.SourcePeakNits:F0} nits at white point {cfg.TargetPaperwhite:F0} nits)."
+                : "Source is SDR → 1:1 passthrough, no tonemapping (source_peak_nits/target_paperwhite have no effect here).");
 
-            // FPS readout: rates are published once per second; re-rasterise only when they change.
-            bool ratesChanged = _captureFps.Update() | _outputFps.Update();
-            bool showOverlay = cfg.FpsOverlay && !overlayFailed;
-            if (showOverlay && (ratesChanged || overlay.Srv is null))
+            // Mouse lock / exclusive depending on output_mode
+            if (!windowed && mode == "exclusive")
             {
+                if (renderer.TrySetExclusiveFullscreen(dst.Output)) { exclusive = true; Log("Exclusive fullscreen active."); }
+                else { Log("Exclusive not possible (cross-adapter?) → falling back to fullscreen_block."); window.EnableCursorBlock(dst.L, dst.T, dst.R, dst.B); }
+            }
+            else if (!windowed && mode == "fullscreen_block")
+            {
+                window.EnableCursorBlock(dst.L, dst.T, dst.R, dst.B);
+                Log("Mouse lock active (fullscreen_block).");
+            }
+
+            // From here on we really mirror → optionally block screen/sleep (auto-release
+            // on stop). Can be toggled live: keep_awake is picked up in the hot reload below.
+            if (cfg.KeepAwake) { KeepAwakeBegin(); keepAwakeOn = true; }
+
+            DateTime lastCfgWrite = SafeWriteTime();
+            bool lastSrcHdr = capture.InputIsHdr;
+            var sessionResult = SessionResult.Stopped;  // clean default: window closed / Stop()
+
+            using var pacer = new FramePacer();
+            using var overlay = new FpsOverlay(device, outH);
+            _captureFps.Reset();
+            _outputFps.Reset();
+            Audio.SetDesired(cfg.AudioMirror, dst.Friendly);
+            LogFramePacing(cfg);
+
+            var clock = Stopwatch.StartNew();
+            long nextCfgPollMs = ConfigPollMs, nextHdrPollMs = HdrPollMs;
+            bool dirty = true;  // something other than a new source frame needs a redraw
+            bool overlayFailed = false;
+            long presented = 0;
+
+            while (window.Running && !_stop)
+            {
+                window.PumpMessages();
+                long nowMs = clock.ElapsedMilliseconds;
+
+                // Config hot reload (mtime polling). LIVE parameters only; structure needs Restart.
+                if (nowMs >= nextCfgPollMs)
+                {
+                    nextCfgPollMs = nowMs + ConfigPollMs;
+                    var t = SafeWriteTime();
+                    if (t != lastCfgWrite)
+                    {
+                        lastCfgWrite = t;
+                        var nc = MirrorConfig.Load(ConfigPath);
+                        bool pacingChanged = nc.EffectiveTargetFps != cfg.EffectiveTargetFps || nc.Vsync != cfg.Vsync;
+                        CopyLiveKeys(nc, cfg);
+                        // Sleep-mode lock on/off live, without a render restart.
+                        if (cfg.KeepAwake && !keepAwakeOn) { KeepAwakeBegin(); keepAwakeOn = true; }
+                        else if (!cfg.KeepAwake && keepAwakeOn) { KeepAwakeEnd(); keepAwakeOn = false; }
+                        // Source-side live parameters (e.g. WGC cursor capture in window mode).
+                        capture.ApplyLiveConfig(cfg);
+                        Audio.SetDesired(cfg.AudioMirror, dst.Friendly);
+                        if (pacingChanged) { pacer.Reset(); LogFramePacing(cfg); }
+                        dirty = true;
+                        Log("Config reloaded (live parameters).");
+                    }
+                }
+
+                // Track HDR on/off at the monitor during operation. Without it the shader keeps
+                // using the wrong source curve after a toggle: HDR source as SDR = blown out,
+                // SDR source as HDR = too dark.
+                if (nowMs >= nextHdrPollMs)
+                {
+                    nextHdrPollMs = nowMs + HdrPollMs;
+                    capture.RefreshSourceState();
+                    if (capture.InputIsHdr != lastSrcHdr)
+                    {
+                        lastSrcHdr = capture.InputIsHdr;
+                        dirty = true;
+                        Log(lastSrcHdr
+                            ? "Source switched to HDR → tonemapping path active."
+                            : "Source switched to SDR → 1:1 passthrough, no tonemapping.");
+                    }
+                }
+
+                // Frame pacing. VSync on or no limit: block until the source delivers a new frame (or
+                // the timeout). target_fps with VSync off: sleep until the next slot, THEN take whatever
+                // is newest — the capture keeps only the latest image, so a slot never shows a stale frame.
+                int fps = cfg.EffectiveTargetFps;
+                bool newFrame;
                 try
                 {
-                    if (overlay.SetText(FpsOverlay.FormatRates(_captureFps.Fps, _outputFps.Fps))) dirty = true;
+                    if (fps > 0)
+                    {
+                        pacer.WaitForNextFrame(fps, () => _stop || !window.Running, window.PumpMessages);
+                        newFrame = capture.TryAcquire(context, 0);
+                    }
+                    else
+                    {
+                        newFrame = capture.TryAcquire(context, AcquireTimeoutMs);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    // A diagnostics aid must never take the mirror down (GDI+/texture failure).
-                    overlayFailed = true;
-                    showOverlay = false;
-                    Log("FPS overlay disabled for this session: " + ex.Message);
+                    // ACCESS_LOST or similar → first a quick recovery of the source (transient case).
+                    Log("Capture source lost (" + ex.Message + ") → re-initializing.");
+                    if (!TryRecoverCapture(capture))
+                    {
+                        // If it stays dead (e.g. device lost, cross-adapter) → do NOT keep spinning,
+                        // abort the session instead → the supervisor rebuilds the whole chain.
+                        Log("Duplication recovery failed → full reinit of the render chain.");
+                        sessionResult = SessionResult.Lost;
+                        break;
+                    }
+                    pacer.Reset();
+                    dirty = true;
+                    continue;  // fresh duplication → next round acquires cleanly again
                 }
+                if (newFrame) _captureFps.Tick();
+
+                // FPS readout: rates are published once per second; re-rasterise only when they change.
+                bool ratesChanged = _captureFps.Update() | _outputFps.Update();
+                bool showOverlay = cfg.FpsOverlay && !overlayFailed;
+                if (showOverlay && (ratesChanged || overlay.Srv is null))
+                {
+                    try
+                    {
+                        if (overlay.SetText(FpsOverlay.FormatRates(_captureFps.Fps, _outputFps.Fps))) dirty = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        // A diagnostics aid must never take the mirror down (GDI+/texture failure).
+                        overlayFailed = true;
+                        showOverlay = false;
+                        Log("FPS overlay disabled for this session: " + ex.Message);
+                    }
+                }
+
+                // Nothing new to show → skip render + present entirely (the display keeps the last
+                // frame). This is where an idle source or a frame limit saves GPU and copy work.
+                if (capture.Srv == null || !(newFrame || dirty)) continue;
+
+                renderer.Render(capture, cfg);
+                if (showOverlay) renderer.DrawOverlay(overlay, cfg.FpsOverlayPosition);
+                renderer.Present(cfg.Vsync);
+                _outputFps.Tick();
+                presented++;
+                dirty = false;
             }
+            // Only a session that actually showed frames counts as healthy (see HealthySessionMs).
+            long healthyMs = presented > 0 ? clock.ElapsedMilliseconds : 0;
 
-            // Nothing new to show → skip render + present entirely (the display keeps the last
-            // frame). This is where an idle source or a frame limit saves GPU and copy work.
-            if (capture.Srv == null || !(newFrame || dirty)) continue;
-
-            renderer.Render(capture, cfg);
-            if (showOverlay) renderer.DrawOverlay(overlay, cfg.FpsOverlayPosition);
-            renderer.Present(cfg.Vsync);
-            _outputFps.Tick();
-            presented++;
-            dirty = false;
+            Log(sessionResult == SessionResult.Lost
+                ? "Render session lost, cleaning up for reinit."
+                : "Render finished, cleaning up.");
+            return (sessionResult, healthyMs);
         }
-        // Only a session that actually showed frames counts as healthy (see HealthySessionMs).
-        long healthyMs = presented > 0 ? clock.ElapsedMilliseconds : 0;
-
-        Log(sessionResult == SessionResult.Lost
-            ? "Render session lost, cleaning up for reinit."
-            : "Render finished, cleaning up.");
-        if (keepAwakeOn) KeepAwakeEnd();
-        window.DisableCursorBlock();
-        if (exclusive) renderer.ExitFullscreen(); // BEFORE swapchain dispose (DXGI requirement)
-        capture.Dispose();
-        renderer.Dispose();
-        window.Destroy();                          // AFTER swapchain dispose: HWND no longer referenced
-        context.Dispose();
-        device.Dispose();
-        foreach (var disp in displays) disp.Output.Dispose();
-        foreach (var ad in adapters) ad.Dispose();
-        factory.Dispose();
-        return (sessionResult, healthyMs);
+        finally
+        {
+            if (keepAwakeOn) KeepAwakeEnd();
+            window?.DisableCursorBlock();
+            if (exclusive) renderer?.ExitFullscreen(); // BEFORE swapchain dispose (DXGI requirement)
+            capture?.Dispose();
+            renderer?.Dispose();
+            window?.Destroy();                          // AFTER swapchain dispose: HWND no longer referenced
+            context?.Dispose();
+            device?.Dispose();
+            CleanupEnum();
+        }
     }
 
     /// <summary>Copy the LIVE keys of a freshly loaded config into the running one.</summary>

@@ -5,6 +5,10 @@ namespace RitschyMirror;
 /// a full-screen triangle (no vertex buffer); the pixel shader does
 /// HDR→SDR tonemapping + image corrections. The cbuffer fields MUST match the
 /// renderer's params struct field by field (same order/size, 16-byte aligned).
+///
+/// Keep this source pure ASCII: the compiler receives it in the system ANSI code page, and on
+/// DBCS locales (e.g. Korean cp949) multi-byte comment characters shifted the length so the
+/// tail of the source - the PSCursor entry point - was cut off.
 /// </summary>
 public static class Shaders
 {
@@ -26,7 +30,7 @@ cbuffer Params : register(b0)
     int   OutputIsHdr;       // 1 = HDR passthrough (no tonemap, scRGB out)
     float2 CropMin;          // Source crop in UV (0..1), default (0,0)
     float2 CropMax;          // Source crop in UV (0..1), default (1,1)
-    float SrcScale;          // Buffer value → working light (1.0 = white point)
+    float SrcScale;          // Buffer value -> working light (1.0 = white point)
     float _pad;
 };
 
@@ -41,7 +45,7 @@ VSOut VSMain(uint id : SV_VertexID)
     return o;
 }
 
-// ── Color helpers ───────────────────────────────────────────────────────────
+// -- Color helpers -----------------------------------------------------------
 float3 SrgbToLinear(float3 c)
 {
     return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
@@ -53,7 +57,7 @@ float3 LinearToSrgb(float3 c)
 }
 float Luminance(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
-// ── Tonemap operators (input linear, 1.0 = white point) ──────────────────
+// -- Tonemap operators (input linear, 1.0 = white point) ------------------
 float3 TmReinhard(float3 x, float wp)
 {
     // Extended Reinhard with white point
@@ -86,25 +90,25 @@ float3 TmBt2390(float3 x, float wp)
 float4 PSMain(VSOut i) : SV_Target
 {
     // Source crop: map the visible UV (0..1 across the viewport) onto the source's
-    // crop rectangle. Without crop CropMin=(0,0)/CropMax=(1,1) → identity.
+    // crop rectangle. Without crop CropMin=(0,0)/CropMax=(1,1) -> identity.
     float2 suv = CropMin + i.uv * (CropMax - CropMin);
     float3 col = Src.Sample(Smp, suv).rgb;
 
     // Input color space -> linear working light (1.0 = white point).
     // IMPORTANT: DXGI Desktop Duplication and WGC with R16G16B16A16_FLOAT ALWAYS deliver
-    // linear scRGB — even when the monitor runs in SDR mode (measured). sRGB-decoding
+    // linear scRGB - even when the monitor runs in SDR mode (measured). sRGB-decoding
     // there would be a SECOND gamma and makes the image dramatically too dark. So only a
     // truly sRGB-encoded buffer (8-bit sources) gets decoded.
     if (SrcIsLinear)
         col = max(col, 0);
     else
         col = SrgbToLinear(saturate(col));
-    col *= SrcScale;   // scRGB: 80/white point · SDR source: 1.0 (white is already white)
+    col *= SrcScale;   // scRGB: 80/white point / SDR source: 1.0 (white is already white)
 
     col *= exp2(Exposure);
 
     // Tonemap only if the source has any headroom ABOVE the white point at all.
-    // An SDR source (SrcPeak == 1) has none — rolling it off would merely darken an already
+    // An SDR source (SrcPeak == 1) has none - rolling it off would merely darken an already
     // finished 1:1 image. This way the tonemapper itself notices whether HDR is present.
     if (TonemapEnabled && !OutputIsHdr && SrcPeak > 1.0001)
     {

@@ -21,6 +21,13 @@
 - **New: language packs.** The settings window, tray menu, OBS dock and user-facing errors are now
   available in English, Korean and German, following the Windows display language or the choice in
   Settings. A `lang\<code>.json` next to the exe overrides a translation or adds a language.
+- **Fixed: mirroring never started on Windows with a double-byte system locale** (e.g. Korean).
+  The shader source contained non-ASCII comment characters; under such a code page the source
+  reached the compiler truncated, the cursor shader's entry point was missing and the render
+  session failed. The source is now pure ASCII.
+- **Fixed: a failed render start leaked the screen capture**, so every automatic retry failed with
+  "invalid parameter" until the app was restarted. A session now always releases everything it
+  created, even when a setup step throws.
 - Code comments and `mirror.log` messages are now English.
 - The dock shows the last error, the FPS rates and the audio-mirror status.
 
