@@ -147,7 +147,10 @@ public sealed class MirrorEngine
             string name = string.IsNullOrWhiteSpace(label) ? key : label;
             return (-1, new LocalizedText(isSource ? "error.source_not_connected" : "error.target_not_connected", name));
         }
-        return (Math.Clamp(index, 0, displays.Count - 1), null); // old config without identity
+        // Old config without identity → index. -1 = explicitly nothing selected (cleared by the GUI).
+        if (index < 0)
+            return (-1, new LocalizedText(isSource ? "error.no_source_selected" : "error.no_target_selected"));
+        return (Math.Min(index, displays.Count - 1), null);
     }
 
     /// <summary>Pre-check (tray/GUI): can the configured source + target be resolved right now?
@@ -158,10 +161,13 @@ public sealed class MirrorEngine
         if (displays.Count == 0) return new LocalizedText("error.no_displays");
         var cfg = MirrorConfig.Load(ConfigPath);
         var ids = displays.Select(d => (Key: d.Key, Label: d.Friendly)).ToList();
-        var (_, se) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, isSource: true);
-        if (se != null) return se;
         var (_, de) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, isSource: false);
         if (de != null) return de;
+        if (cfg.ResolveCaptureMode() != "monitor") return null;   // window source: any monitor may be the target
+        var (si, se) = ResolveSelection(cfg.SourceKey, cfg.SourceLabel, cfg.SourceDisplay, ids, isSource: true);
+        if (se != null) return se;
+        var (di, _) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, isSource: false);
+        if (si == di) return new LocalizedText("error.same_source_target");
         return null;
     }
 
@@ -354,7 +360,15 @@ public sealed class MirrorEngine
                     _lastError = srcErr;
                     return (SessionResult.Fatal, 0);
                 }
-                var src = displays[srcIdx];
+                if (srcIdx == dstIdx)
+            {
+                // Mirroring a monitor onto itself only feeds the output back into the capture.
+                var same = new LocalizedText("error.same_source_target");
+                Log("Start aborted: " + same.English);
+                _lastError = same;
+                return (SessionResult.Fatal, 0);
+            }
+            var src = displays[srcIdx];
                 D3D11CreateDevice(src.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
                     out device, out context).CheckError();
                 Log($"Source = Display {srcIdx} ({src.Name}), target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");

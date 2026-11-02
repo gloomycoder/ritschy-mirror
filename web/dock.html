@@ -141,6 +141,7 @@
 <script>
 const $ = id => document.getElementById(id);
 let displays = [], windows = [], booted = false, busy = false, lastConfig = null;
+let dstMap = [];   // displays index per target <option> (the source monitor is left out)
 const running = () => $("toggle").dataset.running === "1";
 
 // ── Language pack (same keys as the desktop UI, served by the agent at /lang) ──
@@ -218,18 +219,28 @@ $("window_height").addEventListener("change", e => patchStruct({ window_height: 
 
 // ── Monitors (identity like the app, restart if active) ──
 async function pickMonitor(which) {
-  const d = displays[$(which).selectedIndex];
+  const d = which === "src" ? displays[$("src").selectedIndex] : displays[dstMap[$("dst").selectedIndex]];
   if (!d) return;
-  const body = which === "src"
-    ? { source_key: d.key, source_label: d.friendly, source_display: d.index }
-    : { target_key: d.key, target_label: d.friendly, target_display: d.index };
+  let body;
+  if (which === "src") {
+    body = { source_key: d.key, source_label: d.friendly, source_display: d.index };
+    // Source and target must differ: a target equal to the new source is cleared (nothing selected).
+    if (lastConfig && (lastConfig.capture_mode || "monitor") === "monitor" && findDisplay(lastConfig, "target") === d.index)
+      Object.assign(body, { target_key: "", target_label: "", target_display: -1 });
+  } else {
+    body = { target_key: d.key, target_label: d.friendly, target_display: d.index };
+  }
   await patchStruct(body);
+  renderTargets(lastConfig);
 }
 $("src").addEventListener("change", () => pickMonitor("src"));
 $("dst").addEventListener("change", () => pickMonitor("dst"));
 
 // ── Source mode + window selection (identity exe+title, restart if active) ──
-$("capture_mode").addEventListener("change", e => patchStruct({ capture_mode: e.target.value }));
+$("capture_mode").addEventListener("change", async e => {
+  await patchStruct({ capture_mode: e.target.value });
+  renderTargets(lastConfig);
+});
 $("refresh_win").addEventListener("click", loadWindows);
 $("window_pick").addEventListener("change", pickWindow);
 
@@ -262,6 +273,7 @@ async function pickWindow() {
   if (!w) return;
   $("capture_mode").value = "window";
   await patchStruct({ window_exe: w.exe, window_title: w.title, capture_mode: "window" });
+  renderTargets(lastConfig);
 }
 
 $("toggle").addEventListener("click", async () => {
@@ -274,27 +286,42 @@ $("refresh").addEventListener("click", loadDisplays);
 async function loadDisplays() {
   try {
     displays = await api("/displays");
-    for (const which of ["src","dst"]) {
-      const sel = $(which); sel.innerHTML = "";
-      displays.forEach(d => {
-        const o = document.createElement("option");
-        o.textContent = `${d.index}: ${d.friendly || d.name} ${d.resolution}${d.hdr ? " HDR" : ""}`;
-        sel.appendChild(o);
-      });
-    }
+    const sel = $("src"); sel.innerHTML = "";
+    displays.forEach(d => sel.appendChild(displayOption(d)));
     syncMonitorSelection(lastConfig);
   } catch (e) { showErr(); }
 }
 
+function displayOption(d) {
+  const o = document.createElement("option");
+  o.textContent = `${d.index}: ${d.friendly || d.name} ${d.resolution}${d.hdr ? " HDR" : ""}`;
+  return o;
+}
+
+// Same identity resolution as the app: key → unique label → index (-1 = nothing selected).
+function findDisplay(cfg, role) {
+  const key = cfg[role + "_key"], label = cfg[role + "_label"], idx = cfg[role + "_display"] ?? 0;
+  let i = displays.findIndex(d => d.key && d.key === key);
+  if (i < 0 && label) { const m = displays.filter(d => d.friendly === label); if (m.length === 1) i = m[0].index; }
+  if (i >= 0) return i;
+  if (key || label) return -1;   // saved monitor not connected
+  return idx >= 0 && idx < displays.length ? idx : -1;
+}
+
+// Target list without the source monitor (monitor mode only — a window source may sit anywhere).
+function renderTargets(cfg) {
+  if (!cfg || !displays.length) return;
+  const src = (cfg.capture_mode || "monitor") === "monitor" ? findDisplay(cfg, "source") : -1;
+  const sel = $("dst"); sel.innerHTML = "";
+  dstMap = displays.map(d => d.index).filter(i => i !== src);
+  dstMap.forEach(i => sel.appendChild(displayOption(displays[i])));
+  sel.selectedIndex = dstMap.indexOf(findDisplay(cfg, "target"));
+}
+
 function syncMonitorSelection(cfg) {
   if (!cfg || !displays.length) return;
-  const find = (key, label, idx) => {
-    let i = displays.findIndex(d => d.key && d.key === key);
-    if (i < 0 && label) { const m = displays.filter(d => d.friendly === label); if (m.length === 1) i = m[0].index; }
-    return i >= 0 ? i : (idx < displays.length ? idx : 0);
-  };
-  $("src").selectedIndex = find(cfg.source_key, cfg.source_label, cfg.source_display || 0);
-  $("dst").selectedIndex = find(cfg.target_key, cfg.target_label, cfg.target_display || 0);
+  $("src").selectedIndex = findDisplay(cfg, "source");
+  renderTargets(cfg);
 }
 
 function applyStatus(st) {

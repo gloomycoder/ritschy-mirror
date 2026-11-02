@@ -35,6 +35,9 @@
   the header carries the on/off switch and a live summary (e.g. running state and source → target,
   `60 fps limit · capture 59.9 / output 60.0 fps`, the audio-mirror status), expanding it shows the
   sub-settings. Expanded sections are remembered.
+- **Source and target can no longer be the same monitor.** The target list (settings and dock)
+  leaves out the current source monitor; changing the source to the current target clears the
+  target (nothing selected), and starting is refused with a clear message in that state.
 - **Log pane** at the bottom of the settings window: the tail of `mirror.log` plus every new line
   live; resizable, hidden with one click (remembered).
 - **Fixed: the settings window at 125/150 % display scaling** — controls no longer overlap and

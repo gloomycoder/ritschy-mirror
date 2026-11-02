@@ -45,6 +45,7 @@ public sealed class SettingsForm : Form
     private ComboBox _srcCombo = null!, _dstCombo = null!;
     private ComboBox _modeCombo = null!, _winCombo = null!;
     private List<DisplayInfo> _displays = new();
+    private List<int> _dstIndices = new();   // _displays index per target-combo entry (source filtered out)
     private List<WindowInfo> _windows = new();
     private Label _audioStatus = null!;
     private readonly System.Windows.Forms.Timer _statusTimer;
@@ -335,7 +336,7 @@ public sealed class SettingsForm : Form
 
         // Source mode: whole monitor (Desktop Duplication) OR a single window (Windows.Graphics.Capture).
         _modeCombo = ComboRow(L.T("settings.capture_mode"), new[] { "monitor", "window" }, _cfg.ResolveCaptureMode(),
-                              v => _cfg.CaptureMode = v);
+                              v => { _cfg.CaptureMode = v; RebuildTargetList(); });
         Note(L.T("settings.capture_mode.note1"));
         Note(L.T("settings.capture_mode.note2"));
 
@@ -366,10 +367,9 @@ public sealed class SettingsForm : Form
 
         Lbl(L.T("settings.target_monitor"));
         _dstCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(CX, _y), Width = 330 };
-        _dstCombo.Items.AddRange(names);
         int diSel = FindByIdentity(_cfg.TargetKey, _cfg.TargetLabel, _cfg.TargetDisplay);
-        if (diSel >= 0) _dstCombo.SelectedIndex = diSel;
-        _dstCombo.SelectedIndexChanged += (_, _) => { if (!_loading) StoreSelection(_dstCombo, src: false); };
+        RebuildTargetList();
+        _dstCombo.SelectedIndexChanged += (_, _) => { if (!_loading) StoreTarget(); };
         _body.Controls.Add(_dstCombo);
         var refresh = new Button { Text = "↻", Location = new Point(CX + 338, _y - 1), Width = 32, Height = 26 };
         refresh.Click += (_, _) => RefreshDisplays();
@@ -588,7 +588,50 @@ public sealed class SettingsForm : Form
         var d = _displays[i];
         if (src) { _cfg.SourceDisplay = i; _cfg.SourceKey = d.Key; _cfg.SourceLabel = d.Friendly; }
         else { _cfg.TargetDisplay = i; _cfg.TargetKey = d.Key; _cfg.TargetLabel = d.Friendly; }
+        if (src) RebuildTargetList();   // the new source may not stay a target candidate
         SaveCfg();
+    }
+
+    private void StoreTarget()
+    {
+        int entry = _dstCombo.SelectedIndex;
+        if (entry < 0 || entry >= _dstIndices.Count) return;
+        var d = _displays[_dstIndices[entry]];
+        _cfg.TargetDisplay = d.Index; _cfg.TargetKey = d.Key; _cfg.TargetLabel = d.Friendly;
+        SaveCfg();
+    }
+
+    /// <summary>
+    /// Source and target must differ: in monitor mode the target list leaves out the current source
+    /// monitor (mirroring a monitor onto itself only feeds the picture back into the capture). If the
+    /// saved target IS the source — e.g. right after the source was changed — the target is cleared
+    /// (nothing selected) instead of silently picking another monitor.
+    /// </summary>
+    private void RebuildTargetList()
+    {
+        int srcIdx = _cfg.ResolveCaptureMode() == "monitor"
+            ? FindByIdentity(_cfg.SourceKey, _cfg.SourceLabel, _cfg.SourceDisplay) : -1;
+        int dstIdx = FindByIdentity(_cfg.TargetKey, _cfg.TargetLabel, _cfg.TargetDisplay);
+        bool clash = srcIdx >= 0 && dstIdx == srcIdx;
+        if (clash) ClearTarget();
+
+        var names = DisplayNames();
+        _dstIndices = Enumerable.Range(0, _displays.Count).Where(i => i != srcIdx).ToList();
+        bool wasLoading = _loading;
+        _loading = true;
+        _dstCombo.Items.Clear();
+        _dstCombo.Items.AddRange(_dstIndices.Select(i => (object)names[i]).ToArray());
+        _dstCombo.SelectedIndex = clash ? -1 : _dstIndices.IndexOf(dstIdx);
+        _loading = wasLoading;
+        if (clash) SaveCfg();
+    }
+
+    /// <summary>No target: empty identity + index -1 (the engine then reports "no target selected").</summary>
+    private void ClearTarget()
+    {
+        _cfg.TargetKey = "";
+        _cfg.TargetLabel = "";
+        _cfg.TargetDisplay = -1;
     }
 
     private void RefreshDisplays()
@@ -597,12 +640,10 @@ public sealed class SettingsForm : Form
         var names = DisplayNames();
         _loading = true;
         _srcCombo.Items.Clear(); _srcCombo.Items.AddRange(names);
-        _dstCombo.Items.Clear(); _dstCombo.Items.AddRange(names);
         int s = FindByIdentity(_cfg.SourceKey, _cfg.SourceLabel, _cfg.SourceDisplay);
-        int d = FindByIdentity(_cfg.TargetKey, _cfg.TargetLabel, _cfg.TargetDisplay);
         _srcCombo.SelectedIndex = s >= 0 ? s : -1;
-        _dstCombo.SelectedIndex = d >= 0 ? d : -1;
         _loading = false;
+        RebuildTargetList();
     }
 
     // ── Window selection (window capture mode) ───────────────────────────
@@ -638,6 +679,7 @@ public sealed class SettingsForm : Form
         _loading = true;
         _modeCombo.SelectedItem = "window";
         _loading = false;
+        RebuildTargetList();   // window mode: every monitor is a valid target again
         SaveCfg();
     }
 
