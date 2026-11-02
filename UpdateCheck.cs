@@ -14,7 +14,7 @@ internal static class UpdateCheck
 {
     public sealed record Result(bool UpdateAvailable, string LatestVersion, string Url);
 
-    private const string Api = "https://api.github.com/repos/RitschyRigz/ritschy-mirror/releases/latest";
+    private const string Api = "https://api.github.com/repos/gloomycoder/ritschy-mirror/releases/latest";
 
     private static readonly HttpClient Http = CreateClient();
 

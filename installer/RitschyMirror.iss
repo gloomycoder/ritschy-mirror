@@ -13,7 +13,7 @@
 #define MyAppName "RitschyMirror"
 #define MyAppVersion "1.4.0"
 #define MyAppPublisher "RitschyRigz"
-#define MyAppURL "https://github.com/RitschyRigz/ritschy-mirror"
+#define MyAppURL "https://github.com/gloomycoder/ritschy-mirror"
 #define MyAppExeName "RitschyMirror.exe"
 ; Project root relative to the .iss (located in installer\) — portable, no absolute build path.
 #define SrcDir SourcePath + ".."

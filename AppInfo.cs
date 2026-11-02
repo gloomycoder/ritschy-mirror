@@ -6,7 +6,7 @@ namespace RitschyMirror;
 internal static class AppInfo
 {
     public const string Name = "RitschyMirror";
-    public const string RepoUrl = "https://github.com/RitschyRigz/ritschy-mirror";
+    public const string RepoUrl = "https://github.com/gloomycoder/ritschy-mirror";
     public const string Copyright = "© 2026 RitschyRigz — MIT License"; // UI shows the localized "about.copyright"
 
     /// <summary>Clean version "1.0.2" (Major.Minor.Build) from the assembly.</summary>
