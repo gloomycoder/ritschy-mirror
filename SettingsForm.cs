@@ -42,8 +42,7 @@ public sealed partial class SettingsForm : Form
     private readonly List<CollapsibleSection> _sections = new();
     private readonly Dictionary<string, CollapsibleSection> _byId = new();
 
-    private ComboBox _srcCombo = null!, _dstCombo = null!;
-    private ComboBox _modeCombo = null!, _winCombo = null!;
+    private ComboBox _dstCombo = null!;
     private List<DisplayInfo> _displays = new();
     private List<int> _dstIndices = new();   // _displays index per target-combo entry (source filtered out)
     private List<WindowInfo> _windows = new();
@@ -334,42 +333,8 @@ public sealed partial class SettingsForm : Form
     {
         var s = BeginSection("mirroring", L.T("section.mirroring"));
         _displays = MirrorEngine.EnumerateDisplays();
-        var names = DisplayNames();
 
-        // Source mode: whole monitor (Desktop Duplication) OR a single window (Windows.Graphics.Capture).
-        _modeCombo = ComboRow(L.T("settings.capture_mode"), new[] { "monitor", "window" }, _cfg.ResolveCaptureMode(),
-                              v => { _cfg.CaptureMode = v; RebuildTargetList(); });
-        Note(L.T("settings.capture_mode.note1"));
-        Note(L.T("settings.capture_mode.note2"));
-
-        Lbl(L.T("settings.source_monitor"));
-        _srcCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(CX, _y), Width = 330 };
-        _srcCombo.Items.AddRange(names);
-        int siSel = FindByIdentity(_cfg.SourceKey, _cfg.SourceLabel, _cfg.SourceDisplay);
-        if (siSel >= 0) _srcCombo.SelectedIndex = siSel;
-        _srcCombo.SelectedIndexChanged += (_, _) => { if (!_loading) StoreSelection(_srcCombo, src: true); };
-        _body.Controls.Add(_srcCombo);
-        _y += ROW;
-        ChoiceRow(L.T("settings.monitor_api"),
-                  new[] { ("dxgi", L.T("api.dxgi")), ("wgc", L.T("api.wgc")) },
-                  _cfg.ResolveMonitorApi(), v => _cfg.MonitorApi = v);
-        Note(L.T("settings.monitor_api.note"));
-
-        // Window source ("window" mode) — identity-stable via exe + title, like the monitor selection.
-        _windows = WindowEnum.List();
-        Lbl(L.T("settings.window"));
-        _winCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(CX, _y), Width = 330 };
-        _winCombo.Items.AddRange(_windows.Select(w => w.DisplayName).ToArray());
-        int wiSel = FindWindowIndex();
-        if (wiSel >= 0) _winCombo.SelectedIndex = wiSel;
-        _winCombo.SelectedIndexChanged += (_, _) => { if (!_loading) StoreWindow(); };
-        _body.Controls.Add(_winCombo);
-        var winRefresh = new Button { Text = "↻", Location = new Point(CX + 338, _y - 1), Width = 32, Height = 26 };
-        winRefresh.Click += (_, _) => RefreshWindows();
-        _body.Controls.Add(winRefresh);
-        _y += ROW;
-        if (wiSel < 0 && HasWindowIdentity())
-            Note(L.T("settings.window_missing", WindowLabel()));
+        BuildCaptureRows();
 
         Lbl(L.T("settings.target_monitor"));
         // Owner-drawn so the primary monitor can be shown dimmed (listed, but not selectable).
@@ -386,9 +351,7 @@ public sealed partial class SettingsForm : Form
         _body.Controls.Add(refresh);
         _y += ROW;
 
-        // Note if a saved selection is currently not connected (it stays saved).
-        if (siSel < 0 && HasIdentity(_cfg.SourceKey, _cfg.SourceLabel))
-            Note(L.T("settings.source_missing", LabelOf(_cfg.SourceKey, _cfg.SourceLabel)));
+        // Note if the saved output monitor is currently not connected (it stays saved).
         if (diSel < 0 && HasIdentity(_cfg.TargetKey, _cfg.TargetLabel))
             Note(L.T("settings.target_missing", LabelOf(_cfg.TargetKey, _cfg.TargetLabel)));
 
@@ -577,18 +540,6 @@ public sealed partial class SettingsForm : Form
         return (index >= 0 && index < _displays.Count) ? index : -1;
     }
 
-    /// <summary>Persist the selection: index (backward compat) AND stable identity (key+label).</summary>
-    private void StoreSelection(ComboBox combo, bool src)
-    {
-        int i = combo.SelectedIndex;
-        if (i < 0 || i >= _displays.Count) return;
-        var d = _displays[i];
-        if (src) { _cfg.SourceDisplay = i; _cfg.SourceKey = d.Key; _cfg.SourceLabel = d.Friendly; }
-        else { _cfg.TargetDisplay = i; _cfg.TargetKey = d.Key; _cfg.TargetLabel = d.Friendly; }
-        if (src) RebuildTargetList();   // the new source may not stay a target candidate
-        SaveCfg();
-    }
-
     private void StoreTarget()
     {
         int entry = _dstCombo.SelectedIndex;
@@ -662,12 +613,7 @@ public sealed partial class SettingsForm : Form
     private void RefreshDisplays()
     {
         _displays = MirrorEngine.EnumerateDisplays();
-        var names = DisplayNames();
-        _loading = true;
-        _srcCombo.Items.Clear(); _srcCombo.Items.AddRange(names);
-        int s = FindByIdentity(_cfg.SourceKey, _cfg.SourceLabel, _cfg.SourceDisplay);
-        _srcCombo.SelectedIndex = s >= 0 ? s : -1;
-        _loading = false;
+        if (!IsWindowMode) PopulateSources();
         RebuildTargetList();
     }
 
@@ -689,34 +635,6 @@ public sealed partial class SettingsForm : Form
         int byExe = _windows.FindIndex(w => string.Equals(w.Exe, _cfg.WindowExe, OIC));
         if (byExe >= 0) return byExe;
         return _windows.FindIndex(w => string.Equals(w.Title, _cfg.WindowTitle, OIC));
-    }
-
-    /// <summary>Persist the window selection (exe + title) and switch the source mode to "window"
-    /// along with it — choosing a window means: mirror the window.</summary>
-    private void StoreWindow()
-    {
-        int i = _winCombo.SelectedIndex;
-        if (i < 0 || i >= _windows.Count) return;
-        var w = _windows[i];
-        _cfg.WindowExe = w.Exe;
-        _cfg.WindowTitle = w.Title;
-        _cfg.CaptureMode = "window";
-        _loading = true;
-        _modeCombo.SelectedItem = "window";
-        _loading = false;
-        RebuildTargetList();   // window mode: every monitor is a valid target again
-        SaveCfg();
-    }
-
-    private void RefreshWindows()
-    {
-        _windows = WindowEnum.List();
-        _loading = true;
-        _winCombo.Items.Clear();
-        _winCombo.Items.AddRange(_windows.Select(w => w.DisplayName).ToArray());
-        int i = FindWindowIndex();
-        _winCombo.SelectedIndex = i >= 0 ? i : -1;
-        _loading = false;
     }
 
     // ── Login autostart (HKCU\...\Run) ────────────────────────────────────

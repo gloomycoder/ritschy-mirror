@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Simpler capture setup:** one **capture mode** list — Monitor (DXGI), Monitor (WGC), Window (WGC)
+  — and one **capture target** list that shows monitors or windows to match the mode (settings and
+  dock). Changing the mode clears the capture target. The config keeps `capture_mode` +
+  `monitor_api`, so older files and the HTTP API are unaffected.
+- The display the mirror is shown on is now called the **output monitor** throughout the UI.
+- Section headers keep their live summary on one line (cut with "…") instead of wrapping a long
+  window title out of view.
+
 ## v1.4.4 — robust audio mirroring, DXGI/WGC monitor capture
 
 - **Monitor capture: choose DXGI or WGC** (`monitor_api`). DXGI Desktop Duplication stays the

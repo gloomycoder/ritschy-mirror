@@ -21,7 +21,7 @@ public sealed class CollapsibleSection : Panel
 
     private readonly Panel _header;
     private readonly Label _arrow;
-    private readonly Label _summary;
+    private readonly SummaryLabel _summary;
 
     public string Id { get; }
     public Panel Body { get; }
@@ -59,8 +59,8 @@ public sealed class CollapsibleSection : Panel
             _header.Controls.Add(titleLabel);
         }
 
-        _summary = new Label { Location = new Point(SummaryX, 0), Size = new Size(width - SummaryX - 10, HeaderHeight),
-                               TextAlign = ContentAlignment.MiddleRight, AutoEllipsis = true, ForeColor = Color.DimGray };
+        _summary = new SummaryLabel { Location = new Point(SummaryX, 0), Size = new Size(width - SummaryX - 10, HeaderHeight),
+                                      ForeColor = Color.DimGray, BackColor = _header.BackColor };
         _header.Controls.Add(_summary);
 
         _header.Click += (_, _) => SetExpanded(!Expanded);
@@ -94,6 +94,35 @@ public sealed class CollapsibleSection : Panel
         Expanded = expanded;
         ApplyExpanded();
         ExpandedChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Header summary: ALWAYS one line, right-aligned, cut with "…". A Label wraps long text (e.g. a
+    /// long window title) onto a second line that the header then clips.
+    /// </summary>
+    private sealed class SummaryLabel : Control
+    {
+        private const TextFormatFlags Flags = TextFormatFlags.Right | TextFormatFlags.VerticalCenter |
+            TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+
+        public SummaryLabel()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                     ControlStyles.ResizeRedraw, true);
+            SetStyle(ControlStyles.Selectable, false);
+        }
+
+        protected override void OnTextChanged(EventArgs e)
+        {
+            base.OnTextChanged(e);
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.Clear(BackColor);
+            TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, ForeColor, Flags);
+        }
     }
 
     private void ApplyExpanded()

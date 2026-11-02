@@ -227,6 +227,7 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 | `AudioDevices.cs` | Active input/output endpoints for the settings list |
 | `DownmixToStereoSampleProvider.cs` | Multichannel → stereo fold-down by speaker mask |
 | `DriftCompensator.cs` | Per-source latency control by tiny resampling-rate changes |
+| `SettingsForm.Source.cs` | Capture mode + capture target rows (list follows the mode) |
 | `SettingsForm.Scale.cs` | Scale-filter row: drop-down with per-filter notes, disabled at 1:1 |
 | `SettingsForm.Audio.cs` | Audio section of the settings window (device checkboxes + gains) |
 | `Localization.cs` | Language packs (`L`), `LocalizedText` for user-facing errors |
@@ -263,7 +264,10 @@ the render thread, Windows releases it automatically if that thread ever exits.
 `window_height`, `output_width`, `output_height`.
 
 `capture_mode` = `monitor` (default) or `window`; in window mode the source is the window matched
-by `window_exe` + `window_title` (stable identity) instead of `source_display`.
+by `window_exe` + `window_title` (stable identity) instead of `source_display`. The settings window
+and the dock present `capture_mode` + `monitor_api` as one "capture mode" choice (Monitor DXGI /
+Monitor WGC / Window WGC) with one "capture target" list; changing it clears the capture target
+(`source_*` / `window_*`).
 
 Source and target must differ (monitor mode), and the **primary monitor** (desktop origin 0,0)
 can't be the target outside the windowed test mode — the GUI and dock list it dimmed and

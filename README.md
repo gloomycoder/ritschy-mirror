@@ -133,7 +133,8 @@ the folder.
 ## Quick start
 
 1. Click the tray icon → **Settings**.
-2. **Source monitor** = the monitor you want to capture. **Target monitor** = the display your
+2. **Capture mode** = Monitor (DXGI), Monitor (WGC) or Window (WGC); **Capture target** = the
+   monitor or window to mirror (the list follows the mode). **Output monitor** = the display your
    capture card is plugged into.
 3. Pick a **Layout mode** (`fit` is the safe default) and **Output mode**
    (`fullscreen_block` if you want the mouse locked out of the capture display).

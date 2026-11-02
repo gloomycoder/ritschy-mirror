@@ -59,19 +59,14 @@
 
   <div class="card">
     <h2><span data-i18n="dock.card.source">Source / target</span> <small data-i18n="dock.restart_hint">(change = restart)</small></h2>
-    <div class="row"><label data-i18n="dock.mode">Mode</label>
+    <div class="row"><label data-i18n="settings.capture_mode">Capture mode</label>
       <select id="capture_mode" data-kind="struct">
-        <option value="monitor" data-i18n="dock.mode.monitor">monitor — whole screen</option>
-        <option value="window" data-i18n="dock.mode.window">window — a window / fullscreen app</option>
+        <option value="monitor_dxgi" data-i18n="mode.monitor_dxgi">Monitor (DXGI)</option>
+        <option value="monitor_wgc" data-i18n="mode.monitor_wgc">Monitor (WGC)</option>
+        <option value="window" data-i18n="mode.window">Window (WGC)</option>
       </select></div>
-    <div class="row"><label data-i18n="dock.window">Window</label><select id="window_pick"></select>
-      <button class="iconbtn" id="refresh_win" data-i18n-title="dock.refresh_windows" title="Refresh window list">↻</button></div>
-    <div class="row"><label data-i18n="dock.src_mon">Source mon.</label><select id="src"></select></div>
-    <div class="row"><label data-i18n="settings.monitor_api">Monitor capture</label>
-      <select id="monitor_api" data-kind="struct">
-        <option value="dxgi" data-i18n="api.dxgi">DXGI Desktop Duplication (default)</option>
-        <option value="wgc" data-i18n="api.wgc">Windows.Graphics.Capture (WGC)</option>
-      </select></div>
+    <div class="row"><label data-i18n="settings.capture_target">Capture target</label><select id="src"></select>
+      <button class="iconbtn" id="refresh_src" data-i18n-title="dock.refresh_sources" title="Refresh list">↻</button></div>
     <div class="row"><label data-i18n="dock.dst_mon">Target mon.</label><select id="dst"></select>
       <button class="iconbtn" id="refresh" data-i18n-title="dock.refresh_monitors" title="Refresh monitors">↻</button></div>
     <div class="hint" data-i18n="dock.window_hint">"window" mirrors only the window — the desktop stays hidden when you alt-tab.</div>
@@ -229,68 +224,84 @@ $("target_fps").addEventListener("change", e => {
 
 // ── Struct fields (restart if active) ──
 $("output_mode").addEventListener("change", e => patchStruct({ output_mode: e.target.value }));
-$("monitor_api").addEventListener("change", e => patchStruct({ monitor_api: e.target.value }));
 $("output_bit_depth").addEventListener("change", e => patchStruct({ output_bit_depth: parseInt(e.target.value,10) }));
 $("window_width").addEventListener("change", e => patchStruct({ window_width: parseInt(e.target.value||"1280",10) }));
 $("window_height").addEventListener("change", e => patchStruct({ window_height: parseInt(e.target.value||"720",10) }));
 
-// ── Monitors (identity like the app, restart if active) ──
-async function pickMonitor(which) {
-  const d = which === "src" ? displays[$("src").selectedIndex] : displays[dstMap[$("dst").selectedIndex]];
-  if (!d) return;
+// ── Capture mode + capture target (identity like the app, restart if active) ──
+// One mode list (Monitor DXGI / Monitor WGC / Window WGC) mapped onto capture_mode + monitor_api;
+// the capture-target list follows the mode. A new mode starts with no capture target.
+const isWindow = cfg => !!cfg && cfg.capture_mode === "window";
+const modeOf = cfg => isWindow(cfg) ? "window" : (cfg.monitor_api === "wgc" ? "monitor_wgc" : "monitor_dxgi");
+
+$("capture_mode").addEventListener("change", async e => {
+  const m = e.target.value;
+  const body = { capture_mode: m === "window" ? "window" : "monitor",
+                 source_key: "", source_label: "", source_display: -1, window_exe: "", window_title: "" };
+  if (m !== "window") body.monitor_api = m === "monitor_wgc" ? "wgc" : "dxgi";
+  await patchStruct(body);
+  if (m === "window") await loadWindows(); else renderSources(lastConfig);
+  renderTargets(lastConfig);
+});
+$("refresh_src").addEventListener("click", () => isWindow(lastConfig) ? loadWindows() : loadDisplays());
+$("src").addEventListener("change", pickSource);
+$("dst").addEventListener("change", pickTarget);
+
+async function pickSource() {
+  const i = $("src").selectedIndex;
   let body;
-  if (which === "src") {
-    body = { source_key: d.key, source_label: d.friendly, source_display: d.index };
-    // Source and target must differ: a target equal to the new source is cleared (nothing selected).
-    if (lastConfig && (lastConfig.capture_mode || "monitor") === "monitor" && findDisplay(lastConfig, "target") === d.index)
-      Object.assign(body, { target_key: "", target_label: "", target_display: -1 });
+  if (isWindow(lastConfig)) {
+    const w = windows[i];
+    if (!w) return;
+    body = { window_exe: w.exe, window_title: w.title };
   } else {
-    body = { target_key: d.key, target_label: d.friendly, target_display: d.index };
+    const d = displays[i];
+    if (!d) return;
+    body = { source_key: d.key, source_label: d.friendly, source_display: d.index };
+    // Capture and output must differ: an output equal to the new capture monitor is cleared.
+    if (lastConfig && findDisplay(lastConfig, "target") === d.index)
+      Object.assign(body, { target_key: "", target_label: "", target_display: -1 });
   }
   await patchStruct(body);
   renderTargets(lastConfig);
 }
-$("src").addEventListener("change", () => pickMonitor("src"));
-$("dst").addEventListener("change", () => pickMonitor("dst"));
 
-// ── Source mode + window selection (identity exe+title, restart if active) ──
-$("capture_mode").addEventListener("change", async e => {
-  await patchStruct({ capture_mode: e.target.value });
+async function pickTarget() {
+  const d = displays[dstMap[$("dst").selectedIndex]];
+  if (!d) return;
+  await patchStruct({ target_key: d.key, target_label: d.friendly, target_display: d.index });
   renderTargets(lastConfig);
-});
-$("refresh_win").addEventListener("click", loadWindows);
-$("window_pick").addEventListener("change", pickWindow);
+}
 
 async function loadWindows() {
-  try {
-    windows = await api("/windows");
-    const sel = $("window_pick"); sel.innerHTML = "";
+  try { windows = await api("/windows"); renderSources(lastConfig); } catch (e) { showErr(); }
+}
+
+// Same order as the app: exe + exact title -> exe -> title. -1 = not open / nothing saved.
+function findWindow(cfg) {
+  const exe = (cfg.window_exe || "").toLowerCase(), title = (cfg.window_title || "").toLowerCase();
+  if (!exe && !title) return -1;
+  let i = windows.findIndex(w => (w.exe || "").toLowerCase() === exe && (w.title || "").toLowerCase() === title);
+  if (i < 0 && exe) i = windows.findIndex(w => (w.exe || "").toLowerCase() === exe);
+  if (i < 0 && title) i = windows.findIndex(w => (w.title || "").toLowerCase() === title);
+  return i;
+}
+
+// Capture-target list for the current mode: open windows or monitors.
+function renderSources(cfg) {
+  if (!cfg) return;
+  const sel = $("src"); sel.innerHTML = "";
+  if (isWindow(cfg)) {
     windows.forEach(w => {
       const o = document.createElement("option");
       o.textContent = w.title + (w.exe ? "  (" + w.exe + ")" : "");
       sel.appendChild(o);
     });
-    syncWindowSelection(lastConfig);
-  } catch (e) { showErr(); }
-}
-
-function syncWindowSelection(cfg) {
-  if (!cfg || !windows.length) return;
-  const exe = (cfg.window_exe || "").toLowerCase(), title = (cfg.window_title || "").toLowerCase();
-  if (!exe && !title) return;
-  let i = windows.findIndex(w => (w.exe || "").toLowerCase() === exe && (w.title || "").toLowerCase() === title);
-  if (i < 0 && exe) i = windows.findIndex(w => (w.exe || "").toLowerCase() === exe);
-  if (i < 0 && title) i = windows.findIndex(w => (w.title || "").toLowerCase() === title);
-  if (i >= 0) $("window_pick").selectedIndex = i;
-}
-
-// Choosing a window means window mode → switch capture_mode along with it.
-async function pickWindow() {
-  const w = windows[$("window_pick").selectedIndex];
-  if (!w) return;
-  $("capture_mode").value = "window";
-  await patchStruct({ window_exe: w.exe, window_title: w.title, capture_mode: "window" });
-  renderTargets(lastConfig);
+    sel.selectedIndex = findWindow(cfg);
+  } else {
+    displays.forEach(d => sel.appendChild(displayOption(d)));
+    sel.selectedIndex = displays.length ? findDisplay(cfg, "source") : -1;
+  }
 }
 
 $("toggle").addEventListener("click", async () => {
@@ -303,9 +314,8 @@ $("refresh").addEventListener("click", loadDisplays);
 async function loadDisplays() {
   try {
     displays = await api("/displays");
-    const sel = $("src"); sel.innerHTML = "";
-    displays.forEach(d => sel.appendChild(displayOption(d)));
-    syncMonitorSelection(lastConfig);
+    renderSources(lastConfig);
+    renderTargets(lastConfig);
   } catch (e) { showErr(); }
 }
 
@@ -325,7 +335,7 @@ function findDisplay(cfg, role) {
   return idx >= 0 && idx < displays.length ? idx : -1;
 }
 
-// Target list without the source monitor (monitor mode only — a window source may sit anywhere).
+// Output list without the capture monitor (monitor mode only — a window may sit anywhere).
 function renderTargets(cfg) {
   if (!cfg || !displays.length) return;
   const src = (cfg.capture_mode || "monitor") === "monitor" ? findDisplay(cfg, "source") : -1;
@@ -339,12 +349,6 @@ function renderTargets(cfg) {
   });
   const tgt = findDisplay(cfg, "target");
   sel.selectedIndex = tgt >= 0 && !displays[tgt].primary ? dstMap.indexOf(tgt) : -1;
-}
-
-function syncMonitorSelection(cfg) {
-  if (!cfg || !displays.length) return;
-  $("src").selectedIndex = findDisplay(cfg, "source");
-  renderTargets(cfg);
 }
 
 function applyStatus(st) {
@@ -376,10 +380,9 @@ function applyStatus(st) {
     if (cfg.content_offset_y != null) $("content_offset_y").value = cfg.content_offset_y;
     $("target_fps").value = cfg.target_fps ?? 0;
     $("target_fps").disabled = cfg.vsync !== false;
-    if (cfg.capture_mode) $("capture_mode").value = cfg.capture_mode;
-    $("monitor_api").value = cfg.monitor_api === "wgc" ? "wgc" : "dxgi";
-    syncMonitorSelection(cfg);
-    syncWindowSelection(cfg);
+    $("capture_mode").value = modeOf(cfg);
+    renderSources(cfg);
+    renderTargets(cfg);
   }
 }
 
