@@ -34,6 +34,14 @@ Get-ChildItem $src -File | ForEach-Object {
     if (($keep -contains $_.Name) -and (Test-Path $target)) { return }
     Copy-Item $_.FullName $target -Force
 }
+# Default render config into config\ (the app moves an older config next to the exe there itself).
+$cfgSrc = Join-Path $src "config\mirror_config.json"
+$cfgDir = Join-Path $dest "config"
+$cfgDest = Join-Path $cfgDir "mirror_config.json"
+if ((Test-Path $cfgSrc) -and -not (Test-Path $cfgDest) -and -not (Test-Path (Join-Path $dest "mirror_config.json"))) {
+    New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
+    Copy-Item $cfgSrc $cfgDest
+}
 $exe = Join-Path $dest "RitschyMirror.exe"
 Write-Host "Installed to: $dest" -ForegroundColor Green
 

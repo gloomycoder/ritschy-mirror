@@ -13,7 +13,6 @@ namespace RitschyMirror;
 /// </summary>
 public sealed class TrayContext : ApplicationContext
 {
-    private readonly string _baseDir;
     private readonly string _appSettingsPath;
     private readonly MirrorEngine _engine;
     private readonly AppSettings _app;
@@ -39,11 +38,14 @@ public sealed class TrayContext : ApplicationContext
 
     public TrayContext(string[]? args = null)
     {
-        _baseDir = AppContext.BaseDirectory;
-        _appSettingsPath = Path.Combine(_baseDir, "app_settings.json");
+        // config\, lang\, log\ next to the exe (migrates the old flat layout, rotates logs).
+        var pathNotes = AppPaths.Prepare();
+        _appSettingsPath = AppPaths.AppSettings;
         _app = AppSettings.Load(_appSettingsPath);
-        L.Init(_baseDir, _app.Language);
-        _engine = new MirrorEngine(_baseDir);
+        L.Init(AppPaths.Base, _app.Language);
+        _engine = new MirrorEngine(AppPaths.MirrorConfig, AppPaths.LogFile);
+        _engine.Log($"RitschyMirror v{AppInfo.Version} started — log {Path.GetFileName(AppPaths.LogFile)}");
+        foreach (var note in pathNotes) _engine.Log(note);
 
         _iconOn = AppIcon.LoadStatus(running: true);
         _iconOff = AppIcon.LoadStatus(running: false);
@@ -167,7 +169,7 @@ public sealed class TrayContext : ApplicationContext
     /// the settings window (its controls are created once, so reopening is the simplest relabel).</summary>
     private void ApplyLanguage()
     {
-        L.Init(_baseDir, _app.Language);
+        L.Init(AppPaths.Base, _app.Language);
         _settingsItem.Text = L.T("tray.settings");
         _logItem.Text = L.T("tray.open_log");
         _quitItem.Text = L.T("tray.quit");

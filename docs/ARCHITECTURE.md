@@ -131,7 +131,7 @@ missing keys always fall back to English. `app_settings.json → language` is `a
 language) or a code.
 
 - Errors meant for the user (`LastError`, preflight) are `LocalizedText` (key + args): shown in the
-  UI language, logged in English via `L.En` — `mirror.log` stays English regardless of the UI.
+  UI language, logged in English via `L.En` — the log stays English regardless of the UI.
 - The OBS dock fetches the active pack from `GET /lang` and fills `data-i18n` / `data-i18n-title`
   elements; the built-in English text is the fallback when the agent is unreachable.
 - Switching the language in Settings re-initialises the packs, relabels the tray and rebuilds the
@@ -177,7 +177,8 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 | `TrayContext.cs` | NotifyIcon + menu, owns the engine + HTTP agent |
 | `SettingsForm.cs` | Local settings GUI (all parameters), one collapsible section per feature |
 | `CollapsibleSection.cs` | Section control: header (on/off toggle + live summary) + collapsible body |
-| `LogView.cs` | Live `mirror.log` pane at the bottom of the settings window |
+| `LogView.cs` | Live log pane (current run's log file) at the bottom of the settings window |
+| `AppPaths.cs` | Folder layout (bin/config/lang/log), legacy migration, log naming + retention |
 | `MirrorEngine.cs` | Render loop (start/stop), display enumeration, live config reload |
 | `Renderer.cs` | Swap chain + layout/crop geometry + shader pipeline (consumes `ICaptureSource`) |
 | `ICaptureSource.cs` | Capture-source seam (FP16 SRV + size/HDR/cursor + acquire/recover/refresh) |
@@ -252,10 +253,24 @@ The [RitschyBot](https://github.com/RitschyRigz) Cockpit can drive this agent vi
 control over HTTP; empty ⇒ WinRM fallback. Response shapes match the WinRM contract so the
 two transports are interchangeable.
 
-## Log
+## Folder layout & log
 
-`mirror.log` next to the exe lists every output at render start (index, name, resolution,
-color space, adapter) — the basis for display selection and HDR detection.
+`AppPaths` owns the layout next to the exe: `bin\` (dependency assemblies), `config\`
+(`mirror_config.json`, `app_settings.json`), `lang\` (pack overrides), `log\`.
+
+- **Dependency DLLs in `bin\`** — normal builds set `GenerateDependencyFile=false` and an
+  `AfterTargets="Build"` step moves every DLL except `RitschyMirror.dll` into `bin\`;
+  `Program.ResolveFromBin` (an `AssemblyLoadContext.Default.Resolving` handler registered first
+  thing in `Main`) loads them from there. Without a deps.json the host would otherwise insist on
+  finding them next to the exe. The single-file publish bundles everything and is unaffected.
+- **One log per run** — `log\mirror_yyyyMMdd_HHmmss.log`, created at start; files older than
+  30 days (`LogRetentionDays`, by last write time) are deleted at start. The settings log pane and
+  the tray's "Open log" show only the current run's file. Every render start lists all outputs
+  (index, name, resolution, color space, adapter) — the basis for display selection and HDR
+  detection.
+- **Migration** — config files and `mirror.log` left next to the exe by older versions are moved
+  into `config\` / `log\mirror_legacy.log` on first start (a legacy config wins over the default
+  that a build drops into `config\`).
 
 ## Packaging
 

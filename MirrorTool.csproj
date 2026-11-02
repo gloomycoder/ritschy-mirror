@@ -35,7 +35,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Default render config → config\ in the output (see AppPaths for the folder layout). -->
     <None Update="mirror_config.json">
+      <Link>config\mirror_config.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
@@ -61,5 +63,19 @@
       <LogicalName>lang.%(Filename).json</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
+
+  <!-- Normal builds: keep the exe folder tidy — dependency assemblies are moved to bin\ and loaded
+       from there by Program.ResolveFromBin. No deps.json, otherwise the host insists on finding them
+       next to the exe. A single-file publish bundles everything into the exe and is left alone. -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' != 'true'">
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+  <Target Name="MoveDependenciesToBin" AfterTargets="Build" Condition="'$(PublishSingleFile)' != 'true'">
+    <ItemGroup>
+      <_DependencyDll Include="$(OutDir)*.dll" Exclude="$(OutDir)$(AssemblyName).dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_DependencyDll)" DestinationFolder="$(OutDir)bin" SkipUnchangedFiles="true" />
+    <Delete Files="@(_DependencyDll)" />
+  </Target>
 
 </Project>

@@ -157,7 +157,20 @@ output mode, and **live image + crop sliders** — no extra software, it's serve
 
 ## Configuration
 
-Settings live in two JSON files next to the executable (you normally never touch these — the
+Folder layout next to the executable:
+
+```
+RitschyMirror.exe
+bin\      dependency DLLs (only in a normal build — the installer's single-file exe bundles them)
+config\   mirror_config.json, app_settings.json
+lang\     your own language packs / translation overrides (optional)
+log\      mirror_<date>_<time>.log — one file per app start, deleted after 30 days
+```
+
+Files from older versions (config and `mirror.log` next to the exe) are moved into these folders
+automatically on first start.
+
+Settings live in two JSON files in `config\` (you normally never touch these — the
 GUI writes them):
 
 - **`mirror_config.json`** — render parameters. Image & layout keys apply **live**; structural

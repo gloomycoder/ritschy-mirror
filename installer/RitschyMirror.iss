@@ -3,9 +3,9 @@
 ;  Screen Mirror Tool for capture cards (HDR -> SDR tonemapping).
 ;
 ;  Per-user installation (NO administrator / UAC needed) - installs to
-;  %LOCALAPPDATA%\Programs\RitschyMirror. Exe + config live together in one
-;  writable folder (the app writes mirror_config.json / app_settings.json
-;  / mirror.log next to it). Uninstalling removes the folder completely.
+;  %LOCALAPPDATA%\Programs\RitschyMirror. Exe + data live together in one
+;  writable folder (the app writes config\*.json and log\*.log below it).
+;  Uninstalling removes the folder completely.
 ;
 ;  Build:  "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" RitschyMirror.iss
 ; ============================================================================
@@ -70,7 +70,8 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescr
 [Files]
 Source: "{#SrcDir}\publish\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 ; Only create the default config if none exists yet (an update does NOT overwrite user settings).
-Source: "{#SrcDir}\installer\default_config\mirror_config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
+; An older install's {app}\mirror_config.json is moved into config\ by the app itself on first start.
+Source: "{#SrcDir}\installer\default_config\mirror_config.json"; DestDir: "{app}\config"; Flags: onlyifdoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Comment: "Screen Mirror Tool"

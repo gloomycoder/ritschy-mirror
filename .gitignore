@@ -10,6 +10,8 @@ installer/out/
 # Runtime / user state (created next to the exe at runtime)
 mirror.log
 app_settings.json
+config/app_settings.json
+log/
 
 # Local dev captures / generated previews (the .ico files ARE tracked)
 smoketest*.png

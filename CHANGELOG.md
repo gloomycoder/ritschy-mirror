@@ -38,6 +38,11 @@
 - **Source and target can no longer be the same monitor.** The target list (settings and dock)
   leaves out the current source monitor; changing the source to the current target clears the
   target (nothing selected), and starting is refused with a clear message in that state.
+- **Tidier install folder:** `config\` (settings), `lang\` (language-pack overrides), `log\` and —
+  in normal builds — `bin\` for the dependency DLLs; only the exe stays at the top. Existing config
+  and `mirror.log` are moved over automatically on first start.
+- **One log file per run** (`log\mirror_<date>_<time>.log`); logs older than 30 days are deleted at
+  start. The settings log pane and "Open log" show the current run only.
 - **Log pane** at the bottom of the settings window: the tail of `mirror.log` plus every new line
   live; resizable, hidden with one click (remembered).
 - **Fixed: the settings window at 125/150 % display scaling** — controls no longer overlap and

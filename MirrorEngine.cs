@@ -64,10 +64,12 @@ public sealed class MirrorEngine
         return Audio.StatusText;
     }
 
-    public MirrorEngine(string baseDir)
+    /// <param name="configPath">mirror_config.json (see <see cref="AppPaths.MirrorConfig"/>).</param>
+    /// <param name="logPath">This run's log file (see <see cref="AppPaths.LogFile"/>).</param>
+    public MirrorEngine(string configPath, string logPath)
     {
-        ConfigPath = Path.Combine(baseDir, "mirror_config.json");
-        LogPath = Path.Combine(baseDir, "mirror.log");
+        ConfigPath = configPath;
+        LogPath = logPath;
         Audio = new AudioMirror(Log);
     }
 

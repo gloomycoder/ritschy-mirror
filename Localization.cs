@@ -8,7 +8,7 @@ namespace RitschyMirror;
 /// Language packs for every user-visible string (settings GUI, tray, OBS dock, user-facing errors).
 ///
 /// Packs are flat JSON objects (<c>"key": "text"</c>, <c>{0}</c>-style placeholders). The built-in
-/// packs (en/ko/de) are embedded in the exe; a <c>lang\&lt;code&gt;.json</c> file next to the exe
+/// packs (en/ko/de) are embedded in the exe; a <c>lang\&lt;code&gt;.json</c> file in the exe's lang folder
 /// overrides single keys of a built-in pack or adds a whole new language. Lookup order for a key:
 /// external current → embedded current → external en → embedded en → the key itself, so a partial
 /// translation never shows blanks.
