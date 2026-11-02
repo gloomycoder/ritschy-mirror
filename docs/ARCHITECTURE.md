@@ -116,10 +116,16 @@ format. The rates are also in `GET /status` (`capture_fps`, `output_fps`).
 
 - **Sources** (`audio_sources`) — output devices are captured in loopback (what they play), input
   devices directly. `id: "default"` follows the Windows default (role Multimedia) of that kind.
-  Each source becomes an `AudioSourceChannel`: `WasapiRecorder` → `BufferedWaveProvider` (own drift
-  trimming) → float → stereo (`ToStereo` / `DownmixToStereoSampleProvider`) → 48 kHz
-  (`WdlResamplingSampleProvider`) → `VolumeSampleProvider` → `MixingSampleProvider` →
-  `WasapiPlayer`. Gain = group dB (`audio_render_gain_db` / `audio_capture_gain_db`) + source dB,
+  Each source becomes an `AudioSourceChannel`: `WasapiRecorder` → `BufferedWaveProvider` → float →
+  stereo (`ToStereo` / `DownmixToStereoSampleProvider` by channel mask) → `DriftCompensator` →
+  48 kHz (`WdlResamplingSampleProvider`) → `VolumeSampleProvider` → `MixingSampleProvider` →
+  `WasapiPlayer`.
+- **Drift** — `DriftCompensator` holds the queue at ~40 ms with a smoothed proportional rate
+  (±0.5 % max, 4-point Hermite); empty queue (loopback is silent) → output silence and re-prime to
+  the target. Only a runaway queue (≥ 300 ms, playback stalled) is cut back on the capture thread.
+- **Output** — `audio_output_id` if set, otherwise the target monitor's endpoint by EDID name.
+- **Retry** — a (re)start that throws (device not ready, exclusive use by another app) is retried
+  by the worker on a 1 s → 30 s back-off; a success resets it. Gain = group dB (`audio_render_gain_db` / `audio_capture_gain_db`) + source dB,
   applied in place; only a change of the *set* of sources rebuilds the pipeline.
 - **Skipping** — an output source that is the target endpoint is skipped (feedback loop), a device
   selected twice ("default" and by id) is captured once (the "default" entry and its gain win),
@@ -213,7 +219,8 @@ device hiccup. Recovery is two-tiered so a transient loss never freezes the pict
 | `AudioSourceChannel.cs` | One captured device: queue, drift trim, stereo/48 kHz conversion, gain |
 | `AudioSourceConfig.cs` | `audio_sources` entry (kind, id, name, enabled, gain_db) |
 | `AudioDevices.cs` | Active input/output endpoints for the settings list |
-| `DownmixToStereoSampleProvider.cs` | Multichannel → stereo fold-down for the mixer |
+| `DownmixToStereoSampleProvider.cs` | Multichannel → stereo fold-down by speaker mask |
+| `DriftCompensator.cs` | Per-source latency control by tiny resampling-rate changes |
 | `SettingsForm.Scale.cs` | Scale-filter row: drop-down with per-filter notes, disabled at 1:1 |
 | `SettingsForm.Audio.cs` | Audio section of the settings window (device checkboxes + gains) |
 | `Localization.cs` | Language packs (`L`), `LocalizedText` for user-facing errors |
@@ -234,7 +241,7 @@ remote controller all write the same file; the render loop reads it live.
 `target_paperwhite`, `exposure`, `saturation`, `contrast`, `gamma`, `content_offset_y`,
 `vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`,
 `target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`, `audio_sources`,
-`audio_render_gain_db`, `audio_capture_gain_db`, `scale_filter`.
+`audio_render_gain_db`, `audio_capture_gain_db`, `audio_output_id`, `audio_output_name`, `scale_filter`.
 
 `tonemap_enabled`, `operator`, `source_peak_nits` and `target_paperwhite` are only in effect for
 an **HDR** source — see [Colour pipeline](#colour-pipeline--hdr-vs-sdr-source).

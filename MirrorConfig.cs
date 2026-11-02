@@ -61,6 +61,9 @@ public sealed class MirrorConfig
     // Group gains on top of each source's own gain: effective = group dB + device dB.
     [JsonPropertyName("audio_render_gain_db")]  public float AudioRenderGainDb { get; set; } = 0f;
     [JsonPropertyName("audio_capture_gain_db")] public float AudioCaptureGainDb { get; set; } = 0f;
+    // Fixed output endpoint for the mix ("" = automatic: the target monitor's HDMI/DP audio by EDID name).
+    [JsonPropertyName("audio_output_id")]   public string AudioOutputId { get; set; } = "";
+    [JsonPropertyName("audio_output_name")] public string AudioOutputName { get; set; } = "";
 
     // ── Source: whole monitor OR a window (restart required) ────────
     // capture_mode: "monitor" (whole screen via Desktop Duplication, default) |
@@ -141,7 +144,7 @@ public sealed class MirrorConfig
         "exposure", "saturation", "contrast", "gamma", "content_offset_y", "vsync",
         "layout_mode", "crop_x", "crop_y", "crop_w", "crop_h", "show_cursor", "keep_awake",
         "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror", "audio_sources", "scale_filter",
-        "audio_render_gain_db", "audio_capture_gain_db",
+        "audio_render_gain_db", "audio_capture_gain_db", "audio_output_id", "audio_output_name",
     };
     public static readonly HashSet<string> StructKeys = new(StringComparer.OrdinalIgnoreCase)
     {

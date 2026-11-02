@@ -7,16 +7,15 @@ namespace RitschyMirror;
 /// <summary>
 /// One captured device feeding the audio-mirror mixer:
 /// WASAPI capture (loopback for an output device, normal capture for an input device)
-/// → queue → float → stereo → mixer sample rate → gain (group gain × device gain).
+/// → queue → float → stereo (by channel mask) → drift compensation → mixer sample rate → gain.
 ///
-/// Each device runs on its own clock, so the queue slowly fills or drains relative to the output.
-/// Overflow is trimmed back to <see cref="TargetLatencyMs"/> on the capture thread (one short skip,
-/// rarely); an underrun reads as silence (<see cref="BufferedWaveProvider.ReadFully"/>).
+/// Each device runs on its own clock, so the queue slowly fills or drains relative to the output;
+/// <see cref="DriftCompensator"/> holds it at ~40 ms by resampling within ±0.5 %. Only if the
+/// queue still runs away (playback stalled) is it cut back on the capture thread.
 /// </summary>
 internal sealed class AudioSourceChannel : IDisposable
 {
-    private const int TargetLatencyMs = 40;
-    private const int MaxLatencyMs = 120;
+    private const int EmergencyLatencyMs = 300;   // drift compensation normally keeps ~40 ms
     private const int QueueCapacityMs = 500;
 
     private readonly MMDevice _device;
@@ -56,12 +55,14 @@ internal sealed class AudioSourceChannel : IDisposable
                 ReadFully = true,
             };
             ISampleProvider s = _queue.ToSampleProvider();
+            int mask = _recorder.WaveFormat is WaveFormatExtensible ext ? ext.ChannelMask : 0;
             s = s.WaveFormat.Channels switch
             {
                 1 => s.ToStereo(),
                 2 => s,
-                _ => new DownmixToStereoSampleProvider(s),
+                _ => new DownmixToStereoSampleProvider(s, mask),
             };
+            s = new DriftCompensator(s, _queue);
             if (s.WaveFormat.SampleRate != mixFormat.SampleRate)
                 s = new WdlResamplingSampleProvider(s, mixFormat.SampleRate);
             _gain = new VolumeSampleProvider(s) { Volume = gain };
@@ -80,7 +81,7 @@ internal sealed class AudioSourceChannel : IDisposable
 
     public void Start() => _recorder.StartRecording();
 
-    /// <summary>Capture thread: queue the block and trim accumulated drift latency.</summary>
+    /// <summary>Capture thread: queue the block; cut back only a runaway queue (playback stalled).</summary>
     private void OnCaptured(ReadOnlySpan<byte> buffer, AudioClientBufferFlags flags, long devicePosition, long qpcPosition)
     {
         if (buffer.IsEmpty) return;
@@ -88,8 +89,8 @@ internal sealed class AudioSourceChannel : IDisposable
 
         var fmt = _queue.WaveFormat;
         int buffered = _queue.BufferedBytes;
-        if (buffered <= BytesFor(fmt, MaxLatencyMs)) return;
-        int drop = buffered - BytesFor(fmt, TargetLatencyMs);
+        if (buffered <= BytesFor(fmt, EmergencyLatencyMs)) return;
+        int drop = buffered - BytesFor(fmt, (int)DriftCompensator.TargetLatencyMs);
         drop -= drop % fmt.BlockAlign;
         if (drop <= 0) return;
         if (_trimScratch.Length < drop) _trimScratch = new byte[drop];

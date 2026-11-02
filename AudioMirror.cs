@@ -14,14 +14,17 @@ public enum AudioMirrorState { Off, Running, Paused, Unavailable }
 ///   loopback (what they play — e.g. speakers plus a headset that Discord plays to), input devices
 ///   directly (e.g. a microphone). "default" entries follow the current Windows default device.
 ///   Gain is in dB and additive: effective = group gain (outputs / inputs) + the device's own gain.
-/// • Target is the audio endpoint whose device description equals the target monitor's EDID name —
-///   Windows names HDMI/DP audio endpoints after the EDID. No match (or several identical monitors)
-///   → <see cref="AudioMirrorState.Unavailable"/>.
+/// • Target (output) is <c>audio_output_id</c> if one is chosen, otherwise the audio endpoint whose
+///   device description equals the target monitor's EDID name — Windows names HDMI/DP audio
+///   endpoints after the EDID. No match (or several identical monitors) → Unavailable.
 /// • An output source that IS the target is skipped (it would loop the mirror back into itself); a
 ///   device selected twice (as "default" and by name) is captured once. If nothing is left because
 ///   the default output already is the target → <see cref="AudioMirrorState.Paused"/>.
 /// • Device notifications (default changed, added/removed, state changed) re-run that decision live;
 ///   they arrive in bursts → debounced. Gain changes apply immediately without a restart.
+///
+/// • A failed (re)start — device not ready yet, held in exclusive mode by another app — is retried
+///   with back-off (1 s → 30 s), because such a device may come back without any notification.
 ///
 /// All audio-object work runs on one dedicated worker thread: Core Audio notification callbacks must
 /// not block or call back into the audio stack, so they only signal the worker.
@@ -29,6 +32,7 @@ public enum AudioMirrorState { Off, Running, Paused, Unavailable }
 public sealed class AudioMirror : IDisposable
 {
     private const int DebounceMs = 300;
+    private const int RetryMinMs = 1000, RetryMaxMs = 30000;
     private const int OutputLatencyMs = 30;
     private const int MixSampleRate = 48000;
 
@@ -43,6 +47,7 @@ public sealed class AudioMirror : IDisposable
     private string _targetLabel = "";
     private List<AudioSourceConfig> _sources = new();
     private float _renderGainDb, _captureGainDb;
+    private string _outputId = "", _outputName = "";
     private string _compositionKey = "";
 
     // Pipeline (built/torn down by the worker; the channel list is also read under _gate for gains).
@@ -73,17 +78,18 @@ public sealed class AudioMirror : IDisposable
     }
 
     /// <summary>
-    /// Request mirroring on/off for the target monitor (EDID name) with these sources and group
-    /// gains. Cheap and idempotent — called at render start, on every config reload and at stop.
-    /// Pure gain changes are applied in place; anything else wakes the worker to rebuild.
+    /// Request mirroring on/off for the target monitor (EDID name) with the audio settings of
+    /// <paramref name="cfg"/> (sources, group gains, optional fixed output). Cheap and idempotent —
+    /// called at render start, on every config reload and at stop. Pure gain changes are applied
+    /// in place; anything else wakes the worker to rebuild.
     /// </summary>
-    public void SetDesired(bool enabled, string targetLabel, IReadOnlyList<AudioSourceConfig> sources,
-                           float renderGainDb, float captureGainDb)
+    public void SetDesired(bool enabled, string targetLabel, MirrorConfig cfg)
     {
         if (_disposed) return;
         targetLabel = (targetLabel ?? "").Trim();
-        var copy = sources.Select(s => s.Clone()).ToList();
-        string composition = $"{enabled}|{targetLabel}|" +
+        var copy = cfg.AudioSources.Select(s => s.Clone()).ToList();
+        string outputId = (cfg.AudioOutputId ?? "").Trim();
+        string composition = $"{enabled}|{targetLabel}|{outputId}|" +
             string.Join(";", copy.Where(s => s.Enabled).Select(s => s.Key.ToLowerInvariant()));
         bool rebuild;
         lock (_gate)
@@ -92,8 +98,10 @@ public sealed class AudioMirror : IDisposable
             _enabled = enabled;
             _targetLabel = targetLabel;
             _sources = copy;
-            _renderGainDb = renderGainDb;
-            _captureGainDb = captureGainDb;
+            _renderGainDb = cfg.AudioRenderGainDb;
+            _captureGainDb = cfg.AudioCaptureGainDb;
+            _outputId = outputId;
+            _outputName = cfg.AudioOutputName ?? "";
             _compositionKey = composition;
             foreach (var ch in _channels) ch.SetGain(GainFor(ch.ConfigKey, ch.IsRender));
         }
@@ -119,18 +127,27 @@ public sealed class AudioMirror : IDisposable
     {
         try
         {
+            int retryMs = 0;   // > 0: the last attempt failed → try again after this long
             while (!_disposed)
             {
-                _wake.WaitOne();
+                bool signalled = retryMs > 0 ? _wake.WaitOne(retryMs) : _wake.WaitOne();
                 // Debounce: a default-device switch fires several notifications back to back.
-                while (!_disposed && _wake.WaitOne(DebounceMs)) { }
+                if (signalled) while (!_disposed && _wake.WaitOne(DebounceMs)) { }
                 if (_disposed) break;
-                try { Reevaluate(); }
+                try
+                {
+                    Reevaluate();
+                    if (retryMs > 0) _log("Audio mirror: recovered.");
+                    retryMs = 0;
+                }
                 catch (Exception ex)
                 {
-                    _log("Audio mirror: evaluation failed: " + ex.Message);
+                    // E.g. the device isn't ready yet after an error, or another app holds it in
+                    // exclusive mode. It may come back without any notification → retry on a timer.
+                    retryMs = retryMs == 0 ? RetryMinMs : Math.Min(retryMs * 2, RetryMaxMs);
+                    _log($"Audio mirror: start failed ({ex.Message}) — retrying in {retryMs / 1000} s.");
                     StopPipeline();
-                    SetStatus(AudioMirrorState.Unavailable, new LocalizedText("audio.status.error", ex.Message));
+                    SetStatus(AudioMirrorState.Unavailable, new LocalizedText("audio.status.retrying", ex.Message, retryMs / 1000));
                 }
             }
         }
@@ -148,8 +165,8 @@ public sealed class AudioMirror : IDisposable
 
     private void Reevaluate()
     {
-        bool enabled; string label; List<AudioSourceConfig> sources;
-        lock (_gate) { enabled = _enabled; label = _targetLabel; sources = _sources; }
+        bool enabled; string label, outputId, outputName; List<AudioSourceConfig> sources;
+        lock (_gate) { enabled = _enabled; label = _targetLabel; sources = _sources; outputId = _outputId; outputName = _outputName; }
 
         if (!enabled)
         {
@@ -160,16 +177,8 @@ public sealed class AudioMirror : IDisposable
 
         EnsureNotifications();
         var en = _enumerator!;
-        if (label.Length == 0) { Unavailable(new LocalizedText("audio.status.no_target_name")); return; }
-
-        var targets = FindTargetEndpoints(en, label);
-        if (targets.Count != 1)
-        {
-            foreach (var t in targets) t.Dispose();
-            Unavailable(new LocalizedText(targets.Count == 0 ? "audio.status.target_not_found" : "audio.status.target_ambiguous", label));
-            return;
-        }
-        MMDevice? dst = targets[0];
+        MMDevice? dst = ResolveOutput(en, label, outputId, outputName);
+        if (dst is null) return;   // status already set
 
         var resolved = new List<Resolved>();
         var skipped = new List<LocalizedText>();
@@ -281,6 +290,31 @@ public sealed class AudioMirror : IDisposable
         _notify.DeviceAdded += (_, _) => Signal();
         _notify.DeviceRemoved += (_, _) => Signal();
         _notify.DeviceStateChanged += (_, _) => Signal();
+    }
+
+    /// <summary>
+    /// The endpoint the mix is played on: the fixed <c>audio_output_id</c> if one is chosen, otherwise
+    /// the target monitor's HDMI/DP endpoint found by EDID name. null = unavailable (status set).
+    /// </summary>
+    private MMDevice? ResolveOutput(MMDeviceEnumerator en, string label, string outputId, string outputName)
+    {
+        if (outputId.Length > 0)
+        {
+            MMDevice? fixedOut;
+            try { fixedOut = en.GetDevice(outputId); }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or ArgumentException) { fixedOut = null; }
+            if (fixedOut is { State: DeviceState.Active }) return fixedOut;
+            fixedOut?.Dispose();
+            Unavailable(new LocalizedText("audio.status.output_not_found", outputName.Length > 0 ? outputName : outputId));
+            return null;
+        }
+
+        if (label.Length == 0) { Unavailable(new LocalizedText("audio.status.no_target_name")); return null; }
+        var targets = FindTargetEndpoints(en, label);
+        if (targets.Count == 1) return targets[0];
+        foreach (var t in targets) t.Dispose();
+        Unavailable(new LocalizedText(targets.Count == 0 ? "audio.status.target_not_found" : "audio.status.target_ambiguous", label));
+        return null;
     }
 
     /// <summary>Active render endpoints whose device description is the monitor's EDID name.</summary>

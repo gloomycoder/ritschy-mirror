@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **Audio recovers on its own after a failed restart.** If the output can't be reopened — not ready
+  yet after an error, or held in exclusive mode by another app — the audio mirror now retries with
+  back-off (1 s → 30 s) instead of waiting for a device notification that may never come.
+- **No more skips from clock drift.** Each source's latency is held at ~40 ms by resampling it
+  imperceptibly faster or slower (±0.5 % max, Hermite interpolation) instead of discarding chunks of
+  audio when the queue grows. After silence a source re-primes cleanly instead of crackling.
+- **Correct multichannel downmix.** 3–8 channel sources are folded to stereo by the real speaker
+  layout (WAVEFORMATEXTENSIBLE channel mask, Windows default layout as fallback) — e.g. a quad
+  source keeps both rear channels instead of mixing one into the centre and dropping the other.
+- **A device ticked by name stays visible when it becomes the Windows default** (marked
+  "default"), so un-ticking "Default output" no longer leaves a hidden selection still capturing.
+- **Choose the audio output device manually** (`audio_output_id`) when the automatic match to the
+  target monitor's HDMI/DP audio fails (different name, identical monitors).
+
 ## v1.4.3 — selectable scale filter (area, bicubic, Lanczos)
 
 - **Selectable scale filter** (`scale_filter`, live): Bilinear (default, as before), Area (box

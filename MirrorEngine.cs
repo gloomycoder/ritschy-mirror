@@ -237,7 +237,7 @@ public sealed class MirrorEngine
             Log($"Mirroring lost — full reinit in {backoffMs} ms (attempt {consecutive}/{MaxConsecutiveReinit}).");
             InterruptibleSleep(backoffMs);
         }
-        Audio.SetDesired(false, "", Array.Empty<AudioSourceConfig>(), 0f, 0f);  // audio keeps running across a reinit, but not past the mirror
+        Audio.SetDesired(false, "", new MirrorConfig());  // audio keeps running across a reinit, but not past the mirror
         Log("Render thread finished.");
     }
 
@@ -441,7 +441,7 @@ public sealed class MirrorEngine
             using var overlay = new FpsOverlay(device, outH);
             _captureFps.Reset();
             _outputFps.Reset();
-            Audio.SetDesired(cfg.AudioMirror, dst.Friendly, cfg.AudioSources, cfg.AudioRenderGainDb, cfg.AudioCaptureGainDb);
+            Audio.SetDesired(cfg.AudioMirror, dst.Friendly, cfg);
             LogFramePacing(cfg);
 
             var clock = Stopwatch.StartNew();
@@ -471,7 +471,7 @@ public sealed class MirrorEngine
                         else if (!cfg.KeepAwake && keepAwakeOn) { KeepAwakeEnd(); keepAwakeOn = false; }
                         // Source-side live parameters (e.g. WGC cursor capture in window mode).
                         capture.ApplyLiveConfig(cfg);
-                        Audio.SetDesired(cfg.AudioMirror, dst.Friendly, cfg.AudioSources, cfg.AudioRenderGainDb, cfg.AudioCaptureGainDb);
+                        Audio.SetDesired(cfg.AudioMirror, dst.Friendly, cfg);
                         if (pacingChanged) { pacer.Reset(); LogFramePacing(cfg); }
                         dirty = true;
                         Log("Config reloaded (live parameters).");
@@ -599,6 +599,7 @@ public sealed class MirrorEngine
         to.FpsOverlay = from.FpsOverlay; to.FpsOverlayPosition = from.FpsOverlayPosition;
         to.AudioMirror = from.AudioMirror; to.AudioSources = from.AudioSources;
         to.AudioRenderGainDb = from.AudioRenderGainDb; to.AudioCaptureGainDb = from.AudioCaptureGainDb;
+        to.AudioOutputId = from.AudioOutputId; to.AudioOutputName = from.AudioOutputName;
     }
 
     private void LogFramePacing(MirrorConfig cfg)

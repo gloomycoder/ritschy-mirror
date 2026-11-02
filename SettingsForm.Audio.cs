@@ -20,8 +20,13 @@ public sealed partial class SettingsForm
         var s = BeginSection("audio", L.T("settings.audio_mirror"), _cfg.AudioMirror, v => _cfg.AudioMirror = v);
         Note(L.T("settings.audio_mirror.note"));
 
-        // The target monitor's own HDMI/DP endpoint is never offered: capturing it would loop the mix.
-        var targetIds = AudioDevices.TargetEndpointIds(_cfg.TargetLabel);
+        // Where the mix goes: automatic (target monitor's HDMI/DP audio) or a fixed device.
+        var autoIds = AudioDevices.TargetEndpointIds(_cfg.TargetLabel);
+        BuildOutputRow(autoIds);
+
+        // The output endpoint itself is never offered as a source: capturing it would loop the mix.
+        var targetIds = string.IsNullOrWhiteSpace(_cfg.AudioOutputId)
+            ? autoIds : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { _cfg.AudioOutputId };
         BuildAudioGroup(render: true, targetIds);
         BuildAudioGroup(render: false, targetIds);
 
@@ -64,13 +69,40 @@ public sealed partial class SettingsForm
         SourceRow(kind, AudioSourceConfig.DefaultId,
                   L.T(render ? "audio.src.default_render" : "audio.src.default_capture", defName), def?.Name ?? "");
 
-        foreach (var d in devices.Where(d => !d.IsDefault && !(render && targetIds.Contains(d.Id))))
-            SourceRow(kind, d.Id, d.Name, d.Name);
+        // The current default is covered by the row above — unless it was also ticked by name: then it
+        // stays listed (marked), otherwise un-ticking "default" would leave a hidden selection capturing.
+        foreach (var d in devices.Where(d => !(render && targetIds.Contains(d.Id))))
+        {
+            if (!d.IsDefault) SourceRow(kind, d.Id, d.Name, d.Name);
+            else if (FindSource(kind, d.Id) is { Enabled: true })
+                SourceRow(kind, d.Id, L.T("audio.src.is_default", d.Name), d.Name);
+        }
 
         foreach (var saved in _cfg.AudioSources.Where(x => x.IsRender == render && !x.IsDefault
                      && !devices.Any(d => string.Equals(d.Id, x.Id, OIC))))
             SourceRow(kind, saved.Id, L.T("audio.src.disconnected", saved.Name.Length > 0 ? saved.Name : saved.Id), saved.Name);
         _y += 6;
+    }
+
+    /// <summary>Output device for the mix: "automatic" (target monitor, by EDID name) or a fixed one.</summary>
+    private void BuildOutputRow(HashSet<string> autoIds)
+    {
+        var devices = AudioDevices.List(render: true);
+        string autoName = devices.FirstOrDefault(d => autoIds.Contains(d.Id))?.Name
+                          ?? (_cfg.TargetLabel.Length > 0 ? _cfg.TargetLabel : L.T("audio.src.none"));
+        var items = new List<(string Value, string Text)> { ("", L.T("audio.out.auto", autoName)) };
+        items.AddRange(devices.Select(d => (d.Id, d.Name)));
+        if (_cfg.AudioOutputId.Length > 0 && !devices.Any(d => string.Equals(d.Id, _cfg.AudioOutputId, OIC)))
+            items.Add((_cfg.AudioOutputId, L.T("audio.src.disconnected", _cfg.AudioOutputName.Length > 0 ? _cfg.AudioOutputName : _cfg.AudioOutputId)));
+
+        var combo = ChoiceRow(L.T("audio.out.label"), items.ToArray(), _cfg.AudioOutputId, id =>
+        {
+            _cfg.AudioOutputId = id;
+            _cfg.AudioOutputName = devices.FirstOrDefault(d => d.Id == id)?.Name ?? "";
+        });
+        combo.Width = 330;
+        combo.DropDownWidth = 420;
+        Note(L.T("audio.out.note"));
     }
 
     /// <summary>Checkbox (include this device) + its own gain.</summary>
