@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.7 — no more cut-off sound endings in the audio mirror
 
 - **Fixed: the end of a short sound could be cut off** (e.g. the last millisecond of a 31–41 ms
   sound). The compensator decided a source had stopped by looking only at the capture queue, not

@@ -1,5 +1,9 @@
 # Roadmap
 
+## Done in v1.4.7 ✓
+
+- **Audio tail fix** — the end of a short sound is played out completely; no silence padding mid-sound.
+
 ## Done in v1.4.6 ✓
 
 - **Audio priming fix** — short sounds after silence play out instead of staying queued.
