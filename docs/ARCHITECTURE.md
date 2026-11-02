@@ -148,8 +148,10 @@ format. The rates are also in `GET /status` (`capture_fps`, `output_fps`).
   So `LoopbackVolume.Factor` applies a hardware volume (dB relative to the maximum, never a boost,
   0 at 0 %), leaves a software volume alone (already in the signal) and always applies mute
   (harmless if already silent). Updated from `AudioEndpointVolume.OnVolumeNotification`. Not
-  documented by Microsoft either way; software mute and input devices are not measured here (input
-  devices are left as Windows delivers them).
+  documented by Microsoft either way. Input devices are left as Windows delivers them — measured on
+  a Realtek USB mic (hardware volume + mute): Windows mute zeroes the captured signal, so the mirror
+  follows it like any other app; the input-level effect could not be isolated there (constant,
+  AGC-like signal), and since nothing is applied on top, the mirror matches what other apps get.
 - **Output** — `audio_output_id` if set, otherwise the target monitor's endpoint by EDID name.
 - **Retry** — a (re)start that throws (device not ready, exclusive use by another app) is retried
   by the worker on a 1 s → 30 s back-off; a success resets it. Gain = group dB (`audio_render_gain_db` / `audio_capture_gain_db`) + source dB,
