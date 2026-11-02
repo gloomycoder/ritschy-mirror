@@ -11,22 +11,22 @@ using WinRT;
 namespace RitschyMirror;
 
 /// <summary>
-/// Aufnahme EINES Fensters / einer Vollbild-Anwendung über <b>Windows.Graphics.Capture</b> (WGC) —
-/// dieselbe OS-API, die OBS' „Fenster-Aufnahme (Windows 10 1903+)" nutzt. Anders als OBS' „Game
-/// Capture" wird NICHTS in den Spielprozess injiziert (kein Anti-Cheat-Risiko, keine Elevation-
-/// Probleme): WGC zieht das Bild aus dem DWM-Kompositor. Das macht es zudem GPU-übergreifend
-/// robust (genau der Cross-Adapter-Fall, an dem OBS' Game-Capture oft schwarz blieb).
+/// Capture of ONE window / fullscreen application via <b>Windows.Graphics.Capture</b> (WGC) —
+/// the same OS API that OBS' "Window Capture (Windows 10 1903+)" uses. Unlike OBS' "Game
+/// Capture", NOTHING is injected into the game process (no anti-cheat risk, no elevation
+/// problems): WGC pulls the image from the DWM compositor. This also makes it robust across GPUs
+/// (exactly the cross-adapter case where OBS' Game Capture often stayed black).
 ///
-/// Liefert die Frames als R16G16B16A16_Float-Textur → identisch zum Duplication-Pfad, daher steckt
-/// es als <see cref="ICaptureSource"/> ohne Pipeline-Änderung in Renderer/Engine.
+/// Delivers frames as an R16G16B16A16_Float texture → identical to the duplication path, so it plugs
+/// in as an <see cref="ICaptureSource"/> without pipeline changes in renderer/engine.
 ///
-/// Sicherheits-Eigenschaft: Es wird NUR der Fensterinhalt gespiegelt — tabst du raus, läuft die
-/// App im Hintergrund weiter und der Stream zeigt weiter sie, NICHT deinen Desktop.
+/// Security property: ONLY the window content is mirrored — if you tab out, the
+/// app keeps running in the background and the stream still shows it, NOT your desktop.
 /// </summary>
 public sealed class WindowCapture : ICaptureSource
 {
     private readonly ID3D11Device _device;
-    private readonly IDirect3DDevice _d3dDevice;   // WinRT-Sicht auf dasselbe D3D11-Device
+    private readonly IDirect3DDevice _d3dDevice;   // WinRT view of the same D3D11 device
     private readonly GraphicsCaptureItem _item;
 
     private Direct3D11CaptureFramePool? _framePool;
@@ -35,7 +35,7 @@ public sealed class WindowCapture : ICaptureSource
     private ID3D11ShaderResourceView? _srv;
 
     private int _poolW, _poolH;
-    private volatile bool _sourceLost;   // Fenster geschlossen (Closed-Event)
+    private volatile bool _sourceLost;   // window closed (Closed event)
     private bool _showCursor;
 
     public int Width { get; private set; }
@@ -43,8 +43,8 @@ public sealed class WindowCapture : ICaptureSource
     public bool InputIsHdr { get; }
     public ID3D11ShaderResourceView? Srv => _srv;
 
-    // Fenster-Capture bäckt den Cursor (falls aktiv) bereits ins Frame → der separate Cursor-Pass
-    // des Renderers entfällt hier (immer „nicht sichtbar"). Steuerung läuft über die WGC-Session.
+    // Window capture already bakes the cursor (if enabled) into the frame → the renderer's separate cursor pass
+    // is skipped here (always "not visible"). Controlled via the WGC session.
     public bool CursorVisible => false;
     public int CursorX => 0;
     public int CursorY => 0;
@@ -68,7 +68,7 @@ public sealed class WindowCapture : ICaptureSource
         var size = _item.Size;
         _poolW = size.Width > 0 ? size.Width : 1;
         _poolH = size.Height > 0 ? size.Height : 1;
-        if (Width == 0) { Width = _poolW; Height = _poolH; }   // vorläufige Maße bis zum ersten Frame
+        if (Width == 0) { Width = _poolW; Height = _poolH; }   // provisional size until the first frame
         _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             _d3dDevice, DirectXPixelFormat.R16G16B16A16Float, 2, new SizeInt32 { Width = _poolW, Height = _poolH });
         _session = _framePool.CreateCaptureSession(_item);
@@ -79,14 +79,14 @@ public sealed class WindowCapture : ICaptureSource
 
     private void StopSession()
     {
-        try { _session?.Dispose(); } catch { /* schon zu */ }
+        try { _session?.Dispose(); } catch { /* already closed */ }
         try { _framePool?.Dispose(); } catch { }
         _session = null;
         _framePool = null;
     }
 
-    /// <summary>Den gelben WGC-Aufnahmerand abschalten, wo die API es kennt (Win11, Build 22000+).
-    /// Auf Windows 10 existiert die Property nicht → Rand bleibt (rein kosmetisch, kein Fehler).</summary>
+    /// <summary>Turn off the yellow WGC capture border where the API supports it (Win11, build 22000+).
+    /// On Windows 10 the property does not exist → the border stays (purely cosmetic, not an error).</summary>
     private static void TryDisableBorder(GraphicsCaptureSession session)
     {
         try
@@ -96,19 +96,19 @@ public sealed class WindowCapture : ICaptureSource
                     "Windows.Graphics.Capture.GraphicsCaptureSession", "IsBorderRequired"))
                 session.IsBorderRequired = false;
         }
-        catch { /* nicht kritisch — Rand bleibt halt sichtbar */ }
+        catch { /* not critical — the border just stays visible */ }
     }
 
     public bool TryAcquire(ID3D11DeviceContext ctx, int timeoutMs = 16)
     {
         if (_sourceLost)
-            throw new InvalidOperationException("Aufnahme-Fenster wurde geschlossen");
+            throw new InvalidOperationException("Capture window was closed");
 
         var pool = _framePool;
         if (pool is null) return false;
 
         using var frame = pool.TryGetNextFrame();
-        if (frame is null) return false; // noch kein neues Frame (kein Fehler)
+        if (frame is null) return false; // no new frame yet (not an error)
 
         using var surface = frame.Surface;
         using var tex = GetTextureFromSurface(surface);
@@ -119,19 +119,19 @@ public sealed class WindowCapture : ICaptureSource
         Width = (int)desc.Width;
         Height = (int)desc.Height;
 
-        // Fenstergröße geändert → Frame-Pool für die FOLGE-Frames nachziehen (dieses Frame ist schon kopiert).
+        // Window size changed → adjust the frame pool for SUBSEQUENT frames (this frame is already copied).
         var content = frame.ContentSize;
         if (content.Width > 0 && content.Height > 0 && (content.Width != _poolW || content.Height != _poolH))
         {
             _poolW = content.Width; _poolH = content.Height;
-            try { pool.Recreate(_d3dDevice, DirectXPixelFormat.R16G16B16A16Float, 2, content); } catch { /* nächster Versuch */ }
+            try { pool.Recreate(_d3dDevice, DirectXPixelFormat.R16G16B16A16Float, 2, content); } catch { /* next attempt */ }
         }
         return true;
     }
 
-    /// <summary>Session/Frame-Pool am selben Fenster neu aufsetzen (transiente Fehler).
-    /// Ist das Fenster geschlossen → false: der Supervisor macht Voll-Reinit, der die Auswahl
-    /// neu auflöst und dann sauber mit „Fenster nicht gefunden" stoppt (statt blind weiterzudrehen).</summary>
+    /// <summary>Re-create session/frame pool on the same window (transient errors).
+    /// If the window is closed → false: the supervisor does a full reinit, which re-resolves the selection
+    /// and then stops cleanly with "window not found" (instead of spinning blindly).</summary>
     public bool Recover()
     {
         if (_sourceLost) return false;
@@ -148,12 +148,12 @@ public sealed class WindowCapture : ICaptureSource
         }
     }
 
-    /// <summary>No-op: der HDR-Zustand kommt hier vom Monitor, auf dem das Fenster BEIM START lag
-    /// (die Fensterwahl ist ohnehin ein Struktur-Parameter). Fenster auf einen Monitor mit anderem
-    /// HDR-Zustand geschoben → Render-Neustart. Beim Monitor-Capture wird live nachgezogen.</summary>
+    /// <summary>No-op: the HDR state here comes from the monitor the window was on AT START
+    /// (the window choice is a structural parameter anyway). Window moved to a monitor with a different
+    /// HDR state → render restart. With monitor capture it is tracked live.</summary>
     public void RefreshSourceState() { }
 
-    /// <summary>Live-Config anwenden: Cursor-Aufnahme der WGC-Session ohne Neustart umschalten.</summary>
+    /// <summary>Apply live config: toggle the WGC session's cursor capture without a restart.</summary>
     public void ApplyLiveConfig(MirrorConfig cfg)
     {
         if (cfg.ShowCursor == _showCursor) return;
@@ -183,15 +183,15 @@ public sealed class WindowCapture : ICaptureSource
         StopSession();
         _srv?.Dispose();
         _copyTex?.Dispose();
-        // _d3dDevice (WinRT-Wrapper) + _item werden vom GC/CsWinRT freigegeben; das eigentliche
-        // ID3D11Device besitzt die Engine und entsorgt es selbst.
+        // _d3dDevice (WinRT wrapper) + _item are released by the GC/CsWinRT; the actual
+        // ID3D11Device is owned by the engine, which disposes it itself.
         (_d3dDevice as IDisposable)?.Dispose();
     }
 
-    // ── WGC-/WinRT-Interop ────────────────────────────────────────────────────────
-    // IID von GraphicsCaptureItem (für den Window-Interop-Factory-Aufruf).
+    // ── WGC/WinRT interop ────────────────────────────────────────────────────────
+    // IID of GraphicsCaptureItem (for the window interop factory call).
     private static readonly Guid GraphicsCaptureItemIid = new("79C3F95B-31F7-4EC2-A464-632EF5D30760");
-    // IID von ID3D11Texture2D (um die D3D11-Textur aus der WGC-Surface zu ziehen).
+    // IID of ID3D11Texture2D (to pull the D3D11 texture out of the WGC surface).
     private static readonly Guid ID3D11Texture2DIid = new("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
 
     [ComImport]

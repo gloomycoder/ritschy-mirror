@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 namespace RitschyMirror;
 
 /// <summary>
-/// Fragt das neueste GitHub-Release ab und vergleicht es mit der laufenden Version.
-/// Reiner Hinweis (kein Selbst-Update): „Version X ist da → Release öffnen".
-/// Best-effort — bei offline/Fehlern/Rate-Limit gibt es einfach `null` zurück.
+/// Queries the latest GitHub release and compares it with the running version.
+/// Notification only (no self-update): "Version X is available → open release".
+/// Best-effort — when offline/on errors/rate limit it simply returns `null`.
 /// </summary>
 internal static class UpdateCheck
 {
@@ -21,7 +21,7 @@ internal static class UpdateCheck
     private static HttpClient CreateClient()
     {
         var c = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-        // GitHub verlangt einen User-Agent, sonst 403.
+        // GitHub requires a User-Agent, otherwise 403.
         c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("RitschyMirror", AppInfo.Version));
         c.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         return c;
@@ -43,7 +43,7 @@ internal static class UpdateCheck
         catch { return null; }
     }
 
-    /// <summary>„v1.0.2", „1.0.2-beta", „1.0.2+hash" → 1.0.2.0 (Major.Minor.Build).</summary>
+    /// <summary>"v1.0.2", "1.0.2-beta", "1.0.2+hash" → 1.0.2.0 (Major.Minor.Build).</summary>
     private static Version? ParseVersion(string s)
     {
         s = (s ?? "").Trim().TrimStart('v', 'V');

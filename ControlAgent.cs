@@ -7,19 +7,19 @@ using System.Text.Json.Nodes;
 namespace RitschyMirror;
 
 /// <summary>
-/// Lokaler HTTP-Steuer-Agent (HttpListener, leichtgewichtig, self-contained-freundlich).
-/// Das Cockpit (oder jeder Client) steuert die Engine ueber IP:Port — die Antwort-Shapes
-/// sind IDENTISCH zum frueheren WinRM-Vertrag (cockpit/services/mirror_control.py), damit
-/// dort nur der Transport getauscht werden muss und Frontend/Status-Dot unveraendert bleiben.
+/// Local HTTP control agent (HttpListener, lightweight, self-contained friendly).
+/// The cockpit (or any client) controls the engine via IP:port — the response shapes
+/// are IDENTICAL to the former WinRM contract (cockpit/services/mirror_control.py), so that
+/// only the transport has to be swapped there and the frontend/status dot stay unchanged.
 ///
-/// Routen:
+/// Routes:
 ///   GET  /health    → {"ok":true}
 ///   GET  /status    → {"running":bool,"state":"running|stopped","config":{...}}
 ///   GET  /config    → mirror_config.json
-///   POST /config    → Whitelist-Merge (Body = JSON-Patch), dann Status
-///   POST /start | /stop | /restart → Engine steuern, dann Status
+///   POST /config    → whitelist merge (body = JSON patch), then status
+///   POST /start | /stop | /restart → control the engine, then status
 ///   GET  /displays  → [{index,name,resolution,hdr,adapter}, ...]
-///   GET  /windows   → [{title,exe,pid}, ...]  (aufnehmbare Fenster für den Fenster-Picker)
+///   GET  /windows   → [{title,exe,pid}, ...]  (capturable windows for the window picker)
 /// </summary>
 public sealed class ControlAgent
 {
@@ -41,8 +41,8 @@ public sealed class ControlAgent
 
     public void Start()
     {
-        // Erst den konfigurierten Bind versuchen ("+" = alle Interfaces, braucht URL-ACL/Install);
-        // schlaegt das fehl (kein ACL/keine Rechte), lokal auf localhost zurueckfallen.
+        // Try the configured bind first ("+" = all interfaces, needs URL ACL/install);
+        // if that fails (no ACL/no rights), fall back to localhost only.
         foreach (var host in new[] { _bind, "localhost" })
         {
             var prefix = $"http://{host}:{_port}/";
@@ -56,12 +56,12 @@ public sealed class ControlAgent
                 _run = true;
                 _thread = new Thread(Loop) { IsBackground = true, Name = "MirrorAgent" };
                 _thread.Start();
-                _engine.Log($"HTTP-Agent lauscht auf {prefix}");
+                _engine.Log($"HTTP agent listening on {prefix}");
                 return;
             }
             catch (Exception ex)
             {
-                _engine.Log($"HTTP-Agent Bind {prefix} fehlgeschlagen: {ex.Message}");
+                _engine.Log($"HTTP agent bind {prefix} failed: {ex.Message}");
                 if (host == "localhost") throw;
             }
         }
@@ -80,7 +80,7 @@ public sealed class ControlAgent
         {
             HttpListenerContext ctx;
             try { ctx = _listener.GetContext(); }
-            catch { break; } // Stop() → Listener zu
+            catch { break; } // Stop() → listener closed
             try { Handle(ctx); }
             catch (Exception ex)
             {
@@ -191,7 +191,7 @@ public sealed class ControlAgent
         return r.ReadToEnd();
     }
 
-    // Eingebettetes OBS-Dock (web/dock.html) — gleiche Origin wie die JSON-Routen ⇒ kein CORS.
+    // Embedded OBS dock (web/dock.html) — same origin as the JSON routes ⇒ no CORS.
     private static string? _dock;
     private static string DockHtml()
     {

@@ -3,48 +3,48 @@ using System.Runtime.InteropServices;
 namespace RitschyMirror;
 
 /// <summary>
-/// Minimales Win32-Fenster (kein WinForms/WPF) — fuer randloses Vollbild auf einem
-/// bestimmten Display oder ein kleines Test-Fenster. Liefert das HWND fuer die
-/// DXGI-Swapchain und pumpt die Nachrichtenschleife.
+/// Minimal Win32 window (no WinForms/WPF) — for borderless fullscreen on a
+/// specific display or a small test window. Provides the HWND for the
+/// DXGI swapchain and pumps the message loop.
 /// </summary>
 public sealed class Win32Window
 {
     public IntPtr Hwnd { get; private set; }
     public bool Running { get; private set; } = true;
 
-    // Fensterklasse-WndProc: EINMAL pro Prozess registriert, Funktionszeiger auf einen STATISCHEN
-    // Delegate, der als static-Feld die ganze Prozess-Lebensdauer gewurzelt ist → GC kann ihn nie
-    // einsammeln. Zwei zuvor latente Crash-Ursachen sind damit weg (Fix v1.3.1, Stream-Crash 01:17):
-    //  (1) frueher war der Delegate ein INSTANZ-Feld → Fenster<->Delegate bildeten einen
-    //      selbstreferenziellen, GC-einsammelbaren Zyklus; wurde er mitten in DispatchMessage
-    //      eingesammelt (JIT haelt "this" nicht laenger lebendig als noetig), rief Windows einen
-    //      toten Delegate auf → CLR-FailFast "callback on a garbage collected delegate" (harter
-    //      Prozess-Tod OHNE Log-Zeile — exakt das 01:17-Muster).
-    //  (2) RegisterClassEx wurde bei jedem Fenster erneut versucht, scheiterte aber ab dem 2. still
-    //      (Klasse existiert schon) → ALLE Fenster teilten den Delegate des ERSTEN; endete dessen
-    //      Instanz nach einem Reinit, dangelte der Klassen-Zeiger fuer alle spaeteren Fenster.
-    // Loesung: ein prozess-weiter statischer WndProc, der per HWND→Instanz an das richtige Fenster
-    // dispatcht (unbekanntes HWND → DefWindowProc, nie ein Aufruf auf etwas Totes).
+    // Window class WndProc: registered ONCE per process, function pointer to a STATIC
+    // delegate that is rooted for the whole process lifetime as a static field → the GC can never
+    // collect it. This removes two previously latent crash causes (fix v1.3.1, stream crash 01:17):
+    //  (1) the delegate used to be an INSTANCE field → window<->delegate formed a
+    //      self-referencing, GC-collectable cycle; if it was collected in the middle of DispatchMessage
+    //      (the JIT keeps "this" alive no longer than necessary), Windows called a
+    //      dead delegate → CLR FailFast "callback on a garbage collected delegate" (hard
+    //      process death WITHOUT a log line — exactly the 01:17 pattern).
+    //  (2) RegisterClassEx was retried for every window, but silently failed from the 2nd on
+    //      (class already exists) → ALL windows shared the delegate of the FIRST; once its
+    //      instance ended after a reinit, the class pointer dangled for all later windows.
+    // Solution: one process-wide static WndProc that dispatches to the right window via
+    // HWND→instance (unknown HWND → DefWindowProc, never a call on something dead).
     private static readonly WndProcDelegate s_wndProc = StaticWndProc;
     private static readonly object s_lock = new();
     private static readonly Dictionary<IntPtr, Win32Window> s_windows = new();
     private static bool s_classRegistered;
     private const string ClassName = "RitschyMirrorWindowClass";
 
-    // ── Maus-Sperre (output_mode "fullscreen_block") ─────────────────────
-    // Low-Level-Maus-Hook haelt den Cursor aus dem Ziel-Display-Rechteck. Funktioniert
-    // auf JEDEM Setup (auch Cross-Adapter), ohne echtes Exclusive-Fullscreen.
+    // ── Mouse lock (output_mode "fullscreen_block") ─────────────────────
+    // Low-level mouse hook keeps the cursor out of the target display rectangle. Works
+    // on ANY setup (including cross-adapter), without true exclusive fullscreen.
     private LowLevelMouseProc? _mouseProc;
     private IntPtr _mouseHook = IntPtr.Zero;
     private RECT _blockRect;
     private bool _inReposition;
-    // Eigener Thread NUR für den Maus-Hook (siehe EnableCursorBlock).
+    // Own thread ONLY for the mouse hook (see EnableCursorBlock).
     private Thread? _hookThread;
     private volatile uint _hookThreadId;
 
     public Win32Window(string title, int x, int y, int width, int height, bool borderless)
     {
-        // Klasse nur EINMAL pro Prozess registrieren (statischer WndProc, s. Feld-Kommentar oben).
+        // Register the class only ONCE per process (static WndProc, see field comment above).
         lock (s_lock)
         {
             if (!s_classRegistered)
@@ -64,7 +64,7 @@ public sealed class Win32Window
             }
         }
 
-        // Borderless (WS_POPUP) fuer Vollbild, sonst overlapped Fenster.
+        // Borderless (WS_POPUP) for fullscreen, otherwise overlapped window.
         uint style = borderless ? 0x80000000 /*WS_POPUP*/ : 0x00CF0000 /*WS_OVERLAPPEDWINDOW*/;
         uint exStyle = borderless ? 0x00000008u /*WS_EX_TOPMOST*/ : 0u;
 
@@ -78,7 +78,7 @@ public sealed class Win32Window
         UpdateWindow(Hwnd);
     }
 
-    /// <summary>Nicht-blockierend alle anstehenden Nachrichten abarbeiten.</summary>
+    /// <summary>Process all pending messages without blocking.</summary>
     public void PumpMessages()
     {
         while (PeekMessage(out var msg, IntPtr.Zero, 0, 0, 1 /*PM_REMOVE*/))
@@ -90,10 +90,10 @@ public sealed class Win32Window
     }
 
     /// <summary>
-    /// Fenster explizit zerstoeren. Noetig fuer den Reinit ZWISCHEN Render-Sessions: dort
-    /// endet der Render-Thread NICHT (er baut die Kette neu), also wuerde das alte HWND sonst
-    /// als randloses Topmost-Geisterfenster auf dem Ziel-Display stehen bleiben, waehrend das
-    /// neue dahinter aufmacht. Muss auf dem Erzeuger-Thread (= Render-Thread) laufen.
+    /// Explicitly destroy the window. Needed for the reinit BETWEEN render sessions: there
+    /// the render thread does NOT end (it rebuilds the chain), so the old HWND would otherwise
+    /// stay on the target display as a borderless topmost ghost window while the
+    /// new one opens behind it. Must run on the creator thread (= render thread).
     /// </summary>
     public void Destroy()
     {
@@ -103,29 +103,29 @@ public sealed class Win32Window
         if (h != IntPtr.Zero)
         {
             lock (s_lock) s_windows.Remove(h);
-            DestroyWindow(h); // synchron → WM_DESTROY → PostQuitMessage(0)
+            DestroyWindow(h); // synchronous → WM_DESTROY → PostQuitMessage(0)
         }
-        // Das von WM_DESTROY gepostete WM_QUIT (und Restnachrichten) hier am Thread abraeumen,
-        // sonst beendet es beim naechsten PumpMessages sofort die frische Session.
+        // Clear the WM_QUIT posted by WM_DESTROY (and leftover messages) here on the thread,
+        // otherwise it would immediately end the fresh session on the next PumpMessages.
         while (PeekMessage(out _, IntPtr.Zero, 0, 0, 1 /*PM_REMOVE*/)) { }
         Running = false;
     }
 
     /// <summary>
-    /// Cursor aus dem Rechteck (l,t,r,b in Bildschirm-Koordinaten) heraushalten.
+    /// Keep the cursor out of the rectangle (l,t,r,b in screen coordinates).
     ///
-    /// Der WH_MOUSE_LL-Hook läuft auf einem EIGENEN, schlanken Thread (nur GetMessage-Loop) —
-    /// NICHT auf dem Render-Thread. Grund: ein Low-Level-Maus-Hook wird auf dem installierenden
-    /// Thread dispatcht und braucht eine flotte Message-Pump. Liefe er auf dem Render-Thread,
-    /// würde er nur ~1×/Frame bedient (Present(vsync) blockiert dazwischen) → die Maus würde
-    /// systemweit auf Render-Kadenz gedrosselt + ruckeln. Auf dem dedizierten Thread kehrt der
-    /// Callback sofort zurück → Cursor bleibt smooth (volle Polling-Rate), Sperre bleibt.
+    /// The WH_MOUSE_LL hook runs on its OWN, lean thread (only a GetMessage loop) —
+    /// NOT on the render thread. Reason: a low-level mouse hook is dispatched on the installing
+    /// thread and needs a quick message pump. If it ran on the render thread,
+    /// it would only be serviced ~1×/frame (Present(vsync) blocks in between) → the mouse would be
+    /// throttled system-wide to render cadence + stutter. On the dedicated thread the
+    /// callback returns immediately → cursor stays smooth (full polling rate), the lock holds.
     /// </summary>
     public void EnableCursorBlock(int l, int t, int r, int b)
     {
         _blockRect = new RECT { Left = l, Top = t, Right = r, Bottom = b };
         if (_hookThread != null) return;
-        _mouseProc = MouseHookProc; // als Feld halten (GC)
+        _mouseProc = MouseHookProc; // keep as a field (GC)
 
         using var ready = new ManualResetEventSlim(false);
         _hookThread = new Thread(() =>
@@ -133,7 +133,7 @@ public sealed class Win32Window
             _hookThreadId = GetCurrentThreadId();
             _mouseHook = SetWindowsHookEx(14 /*WH_MOUSE_LL*/, _mouseProc!, GetModuleHandle(null), 0);
             ready.Set();
-            // Schlanke Loop — tut nichts außer den Hook-Callback prompt zu bedienen.
+            // Lean loop — does nothing except promptly serve the hook callback.
             while (GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
             {
                 TranslateMessage(ref msg);
@@ -142,7 +142,7 @@ public sealed class Win32Window
             if (_mouseHook != IntPtr.Zero) { UnhookWindowsHookEx(_mouseHook); _mouseHook = IntPtr.Zero; }
         }) { IsBackground = true, Name = "MirrorMouseHook" };
         _hookThread.Start();
-        ready.Wait(2000); // bis Hook installiert ist
+        ready.Wait(2000); // until the hook is installed
     }
 
     public void DisableCursorBlock()
@@ -150,7 +150,7 @@ public sealed class Win32Window
         var t = _hookThread;
         if (t != null)
         {
-            // WM_QUIT an den Hook-Thread → GetMessage-Loop endet → Unhook dort.
+            // WM_QUIT to the hook thread → GetMessage loop ends → unhook there.
             if (_hookThreadId != 0) PostThreadMessage(_hookThreadId, 0x0012 /*WM_QUIT*/, IntPtr.Zero, IntPtr.Zero);
             if (Thread.CurrentThread != t) t.Join(2000);
             _hookThread = null;
@@ -167,7 +167,7 @@ public sealed class Win32Window
             int x = data.pt_x, y = data.pt_y;
             if (x >= _blockRect.Left && x < _blockRect.Right && y >= _blockRect.Top && y < _blockRect.Bottom)
             {
-                // Auf die naechstgelegene Aussenkante schieben (kleinste Eindringtiefe).
+                // Push to the nearest outer edge (smallest penetration depth).
                 int dl = x - _blockRect.Left, dr = _blockRect.Right - x;
                 int dt = y - _blockRect.Top,  db = _blockRect.Bottom - y;
                 int min = System.Math.Min(System.Math.Min(dl, dr), System.Math.Min(dt, db));
@@ -179,14 +179,14 @@ public sealed class Win32Window
                 _inReposition = true;
                 SetCursorPos(nx, ny);
                 _inReposition = false;
-                return new IntPtr(1); // Bewegung schlucken
+                return new IntPtr(1); // swallow the movement
             }
         }
         return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
     }
 
-    // Prozess-weiter Dispatcher: findet die Instanz zum HWND und reicht weiter. Unbekanntes HWND
-    // (z. B. Restnachricht nach Destroy) → DefWindowProc, nie ein Aufruf auf etwas Totes.
+    // Process-wide dispatcher: finds the instance for the HWND and forwards. Unknown HWND
+    // (e.g. leftover message after Destroy) → DefWindowProc, never a call on something dead.
     private static IntPtr StaticWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
         Win32Window? self;

@@ -6,17 +6,17 @@ using SharpGen.Runtime;
 namespace RitschyMirror;
 
 /// <summary>
-/// DXGI Desktop Duplication eines Outputs. Liefert pro Frame eine Shader-lesbare
-/// Kopie (R16G16B16A16_Float) als SRV. HDR-faehig via DuplicateOutput1 mit FP16.
+/// DXGI Desktop Duplication of an output. Delivers a shader-readable
+/// copy (R16G16B16A16_Float) per frame as an SRV. HDR-capable via DuplicateOutput1 with FP16.
 ///
-/// Der Maus-Cursor ist im Desktop-Bild NICHT enthalten (DXGI liefert ihn separat:
-/// Position + Shape). Wird hier optional eingelesen und als BGRA-Textur bereitgestellt,
-/// damit der Renderer ihn auf Wunsch einkomponiert (output.show_cursor).
+/// The mouse cursor is NOT part of the desktop image (DXGI delivers it separately:
+/// position + shape). It is optionally read here and provided as a BGRA texture,
+/// so the renderer can composite it on request (output.show_cursor).
 /// </summary>
 public sealed class DuplicationCapture : ICaptureSource
 {
     private readonly ID3D11Device _device;
-    private readonly IDXGIOutput6 _output;   // für Recover() (Duplication ist output-gebunden)
+    private readonly IDXGIOutput6 _output;   // for Recover() (duplication is output-bound)
     private IDXGIOutputDuplication? _dup;
     private ID3D11Texture2D? _copyTex;
     private ID3D11ShaderResourceView? _srv;
@@ -49,8 +49,8 @@ public sealed class DuplicationCapture : ICaptureSource
         _dup = output.DuplicateOutput1(_device, 1, new[] { Format.R16G16B16A16_Float });
     }
 
-    /// <summary>Aktuellen HDR-Zustand des Outputs lesen. Nicht lesbar (Output gerade im
-    /// Moduswechsel) → letzten bekannten Zustand behalten, statt kurz falsch umzuschalten.</summary>
+    /// <summary>Read the current HDR state of the output. Not readable (output currently in a
+    /// mode switch) → keep the last known state instead of briefly flipping wrongly.</summary>
     private bool ReadHdrState()
     {
         try
@@ -62,13 +62,13 @@ public sealed class DuplicationCapture : ICaptureSource
         catch { return InputIsHdr; }
     }
 
-    /// <summary>HDR am Monitor an/aus wird im Betrieb nachgezogen — sonst rechnet der Shader nach
-    /// einem Umschalten mit der falschen Quell-Kennlinie weiter (zu dunkel bzw. ausgefressen).</summary>
+    /// <summary>HDR on/off at the monitor is tracked during operation — otherwise after a
+    /// toggle the shader keeps using the wrong source curve (too dark or blown out).</summary>
     public void RefreshSourceState() => InputIsHdr = ReadHdrState();
 
-    /// <summary>True wenn ein neues Frame geholt+kopiert wurde; false bei Timeout.
-    /// Ist die Duplication (nach fehlgeschlagenem Recreate) tot, liefert die Methode false,
-    /// statt auf einer Null-Referenz zu werfen — der Render-Loop entscheidet dann über Reinit.</summary>
+    /// <summary>True if a new frame was acquired + copied; false on timeout.
+    /// If the duplication is dead (after a failed recreate), the method returns false
+    /// instead of throwing on a null reference — the render loop then decides on reinit.</summary>
     public bool TryAcquire(ID3D11DeviceContext ctx, int timeoutMs = 16)
     {
         var dup = _dup;
@@ -112,7 +112,7 @@ public sealed class DuplicationCapture : ICaptureSource
         Height = (int)src.Height;
     }
 
-    // ── Cursor: Position + Shape einlesen ─────────────────────────────────
+    // ── Cursor: read position + shape ─────────────────────────────────────
     private void UpdateCursor(OutduplFrameInfo fi)
     {
         var dup = _dup;
@@ -138,7 +138,7 @@ public sealed class DuplicationCapture : ICaptureSource
             }
             finally { handle.Free(); }
         }
-        catch { /* Cursor optional — bei Fehlern einfach nicht zeichnen */ }
+        catch { /* cursor is optional — on errors just don't draw it */ }
     }
 
     private void BuildCursorTexture(byte[] buf, OutduplPointerShapeInfo info)
@@ -158,10 +158,10 @@ public sealed class DuplicationCapture : ICaptureSource
                     int s = y * pitch + x * 4;
                     int d = (y * w + x) * 4;
                     bgra[d] = buf[s]; bgra[d + 1] = buf[s + 1]; bgra[d + 2] = buf[s + 2];
-                    bgra[d + 3] = (type == 2) ? buf[s + 3] : (byte)255; // MASKED_COLOR → opak
+                    bgra[d + 3] = (type == 2) ? buf[s + 3] : (byte)255; // MASKED_COLOR → opaque
                 }
         }
-        else // MONOCHROME (AND-Maske + XOR-Maske, 1bpp)
+        else // MONOCHROME (AND mask + XOR mask, 1bpp)
         {
             int xorOff = h * pitch;
             for (int y = 0; y < h; y++)
@@ -171,10 +171,10 @@ public sealed class DuplicationCapture : ICaptureSource
                     int a = (buf[y * pitch + bytePos] >> bit) & 1;
                     int xo = (buf[xorOff + y * pitch + bytePos] >> bit) & 1;
                     int d = (y * w + x) * 4;
-                    if (a == 0 && xo == 0) { bgra[d + 3] = 255; }                                   // schwarz opak
-                    else if (a == 0 && xo == 1) { bgra[d] = bgra[d + 1] = bgra[d + 2] = bgra[d + 3] = 255; } // weiss opak
+                    if (a == 0 && xo == 0) { bgra[d + 3] = 255; }                                   // black opaque
+                    else if (a == 0 && xo == 1) { bgra[d] = bgra[d + 1] = bgra[d + 2] = bgra[d + 3] = 255; } // white opaque
                     else if (a == 1 && xo == 0) { bgra[d + 3] = 0; }                                 // transparent
-                    else { bgra[d + 3] = 255; }                                                       // invert → schwarz opak (Naeherung)
+                    else { bgra[d + 3] = 255; }                                                       // invert → black opaque (approximation)
                 }
         }
 
@@ -198,20 +198,20 @@ public sealed class DuplicationCapture : ICaptureSource
         finally { pin.Free(); }
     }
 
-    /// <summary>Duplication nach AccessLost neu aufsetzen (am gespeicherten Output).
-    /// true = erfolgreich neu aufgesetzt; false = fehlgeschlagen (z.B. Device verloren / weiterhin
-    /// kein Zugriff) — die Capture bleibt dann in einem SAUBEREN toten Zustand (`_dup == null`),
-    /// statt als Halbleiche im Render-Loop eine Null-Ref-Endlosschleife auszulösen. Der Aufrufer
-    /// soll bei false die ganze Render-Kette (Device + Capture) neu bauen.</summary>
+    /// <summary>Re-create the duplication after AccessLost (on the stored output).
+    /// true = successfully re-created; false = failed (e.g. device lost / still no
+    /// access) — the capture then stays in a CLEAN dead state (`_dup == null`),
+    /// instead of triggering a null-ref endless loop in the render loop as a zombie. The caller
+    /// should rebuild the whole render chain (device + capture) on false.</summary>
     public bool Recover()
     {
-        try { _dup?.Dispose(); } catch { /* schon hin — egal */ }
+        try { _dup?.Dispose(); } catch { /* already gone — don't care */ }
         _dup = null;
         try
         {
             _dup = _output.DuplicateOutput1(_device, 1, new[] { Format.R16G16B16A16_Float });
-            // Haeufigster Ausloeser fuer ACCESS_LOST ist ein Moduswechsel — z.B. HDR an/aus.
-            // Also den Quell-Zustand hier zwingend neu lesen, nicht den alten mitschleppen.
+            // The most common trigger for ACCESS_LOST is a mode switch — e.g. HDR on/off.
+            // So the source state must be re-read here, not carried over from before.
             RefreshSourceState();
             return true;
         }
@@ -222,8 +222,8 @@ public sealed class DuplicationCapture : ICaptureSource
         }
     }
 
-    /// <summary>No-op: bei Monitor-Capture komponiert der Renderer den Cursor (separat von DXGI),
-    /// es gibt keinen quellseitigen Live-Zustand nachzuziehen.</summary>
+    /// <summary>No-op: with monitor capture the renderer composites the cursor (separately from DXGI),
+    /// so there is no source-side live state to track.</summary>
     public void ApplyLiveConfig(MirrorConfig cfg) { }
 
     public void Dispose()

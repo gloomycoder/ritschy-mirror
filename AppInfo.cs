@@ -2,14 +2,14 @@ using System.Reflection;
 
 namespace RitschyMirror;
 
-/// <summary>Zentrale App-Metadaten (Version aus der Assembly, Repo/Copyright für „Über").</summary>
+/// <summary>Central app metadata (version from the assembly, repo/copyright for "About").</summary>
 internal static class AppInfo
 {
     public const string Name = "RitschyMirror";
     public const string RepoUrl = "https://github.com/RitschyRigz/ritschy-mirror";
     public const string Copyright = "© 2026 RitschyRigz — MIT-Lizenz";
 
-    /// <summary>Saubere Version „1.0.2" (Major.Minor.Build) aus der Assembly.</summary>
+    /// <summary>Clean version "1.0.2" (Major.Minor.Build) from the assembly.</summary>
     public static string Version
     {
         get

@@ -1,8 +1,8 @@
 <#
-  publish.ps1 — baut RitschyMirror self-contained (eine .exe, ohne .NET am Ziel-PC) nach .\publish\.
-  Danach install.ps1 ausfuehren (kopiert + Verknuepfungen + optional URL-ACL/Firewall).
+  publish.ps1 — builds RitschyMirror self-contained (a single .exe, no .NET needed on the target PC) into .\publish\.
+  Afterwards run install.ps1 (copies + shortcuts + optional URL ACL/firewall).
 
-  Aufruf:  powershell -ExecutionPolicy Bypass -File publish.ps1
+  Usage:  powershell -ExecutionPolicy Bypass -File publish.ps1
 #>
 $ErrorActionPreference = "Stop"
 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -13,8 +13,8 @@ try {
         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
         -o publish
     $exe = Join-Path $dir "publish\RitschyMirror.exe"
-    if (-not (Test-Path $exe)) { throw "Publish fehlgeschlagen: $exe nicht gefunden." }
-    Write-Host "Fertig: $exe" -ForegroundColor Green
-    Write-Host "Naechster Schritt: install.ps1 (am Ziel-PC)" -ForegroundColor Green
+    if (-not (Test-Path $exe)) { throw "Publish failed: $exe not found." }
+    Write-Host "Done: $exe" -ForegroundColor Green
+    Write-Host "Next step: install.ps1 (on the target PC)" -ForegroundColor Green
 }
 finally { Pop-Location }

@@ -5,18 +5,18 @@ using System.Text.Json.Serialization;
 namespace RitschyMirror;
 
 /// <summary>
-/// Laufzeit-Konfiguration, gelesen aus mirror_config.json.
+/// Runtime configuration, read from mirror_config.json.
 ///
-/// Zwei Wirk-Klassen (siehe <see cref="LiveKeys"/> / <see cref="StructKeys"/>):
-///   • LIVE   — Bild/Geometrie, wirkt sofort per Hot-Reload (FileWatcher in MirrorEngine).
-///   • STRUCT — Aufloesung/Display/Fenster-Modus, wirkt erst bei Render-Neustart.
+/// Two effect classes (see <see cref="LiveKeys"/> / <see cref="StructKeys"/>):
+///   • LIVE   — image/geometry, takes effect immediately via hot reload (FileWatcher in MirrorEngine).
+///   • STRUCT — resolution/display/window mode, takes effect only on render restart.
 ///
-/// Die Datei ist die EINZIGE Wahrheit: lokale GUI, lokaler HTTP-Agent und (Fallback)
-/// das Cockpit ueber WinRM schreiben alle dieselbe Datei; der Render-Loop liest sie live.
+/// The file is the SINGLE source of truth: the local GUI, the local HTTP agent and (as a fallback)
+/// the cockpit via WinRM all write the same file; the render loop reads it live.
 /// </summary>
 public sealed class MirrorConfig
 {
-    // ── Tonemapping / Bild (live) ────────────────────────────────────────
+    // ── Tonemapping / image (live) ────────────────────────────────────────
     [JsonPropertyName("tonemap_enabled")]  public bool TonemapEnabled { get; set; } = true;
     [JsonPropertyName("operator")]         public string Operator { get; set; } = "bt2390";
     [JsonPropertyName("source_peak_nits")] public float SourcePeakNits { get; set; } = 1000f;
@@ -27,54 +27,54 @@ public sealed class MirrorConfig
     [JsonPropertyName("gamma")]            public float Gamma { get; set; } = 1f;
     [JsonPropertyName("content_offset_y")] public int ContentOffsetY { get; set; } = 0;
 
-    // ── Layout / Geometrie (live) ────────────────────────────────────────
-    // layout_mode: "fit" (1:1, nichts abgeschnitten) | "stretch" | "top_strip" (21:9→16:9 oben)
-    //              | "crop_region" (frei definiertes Quell-Rechteck)
+    // ── Layout / geometry (live) ────────────────────────────────────────
+    // layout_mode: "fit" (1:1, nothing cropped) | "stretch" | "top_strip" (21:9→16:9 top)
+    //              | "crop_region" (freely defined source rectangle)
     [JsonPropertyName("layout_mode")]      public string LayoutMode { get; set; } = "top_strip";
-    // Quell-Crop in 0..1 (nur fuer layout_mode="crop_region"): Ausschnitt der Quelle.
+    // Source crop in 0..1 (only for layout_mode="crop_region"): section of the source.
     [JsonPropertyName("crop_x")]           public float CropX { get; set; } = 0f;
     [JsonPropertyName("crop_y")]           public float CropY { get; set; } = 0f;
     [JsonPropertyName("crop_w")]           public float CropW { get; set; } = 1f;
     [JsonPropertyName("crop_h")]           public float CropH { get; set; } = 1f;
-    // Maus-Cursor in die Ausgabe komponieren (Desktop Duplication liefert ihn separat).
+    // Composite the mouse cursor into the output (Desktop Duplication delivers it separately).
     [JsonPropertyName("show_cursor")]      public bool ShowCursor { get; set; } = false;
     [JsonPropertyName("vsync")]            public bool Vsync { get; set; } = true;
-    // Schlafmodus + Monitor-Abschaltung verhindern, solange gespiegelt wird (wie ein Videoplayer).
-    // Default an; live umschaltbar (wirkt sofort am laufenden Mirror).
+    // Prevent sleep + monitor power-off while mirroring (like a video player).
+    // On by default; can be toggled live (takes effect immediately on the running mirror).
     [JsonPropertyName("keep_awake")]       public bool KeepAwake { get; set; } = true;
 
-    // ── Quelle: ganzer Monitor ODER ein Fenster (Neustart noetig) ────────
-    // capture_mode: "monitor" (ganzer Bildschirm via Desktop Duplication, Default) |
-    //               "window"  (ein Fenster / eine Vollbild-App via Windows.Graphics.Capture).
-    // Im Fenster-Modus wird NUR das Fenster gespiegelt → beim Raustaben bleibt der Desktop unsichtbar.
+    // ── Source: whole monitor OR a window (restart required) ────────
+    // capture_mode: "monitor" (whole screen via Desktop Duplication, default) |
+    //               "window"  (a window / a fullscreen app via Windows.Graphics.Capture).
+    // In window mode ONLY the window is mirrored → the desktop stays invisible when alt-tabbing out.
     [JsonPropertyName("capture_mode")]     public string CaptureMode { get; set; } = "monitor";
-    // Fenster-Identität (nur capture_mode="window"): Exe (primär, stabil) + Titel (sekundär, zum
-    // Unterscheiden mehrerer Fenster derselben Exe). Analog zur umsteck-festen Monitor-Identität.
+    // Window identity (only capture_mode="window"): exe (primary, stable) + title (secondary, to
+    // tell apart multiple windows of the same exe). Analogous to the replug-proof monitor identity.
     [JsonPropertyName("window_exe")]       public string WindowExe { get; set; } = "";
     [JsonPropertyName("window_title")]     public string WindowTitle { get; set; } = "";
 
-    // ── Struktur (Neustart noetig) ───────────────────────────────────────
+    // ── Structure (restart required) ───────────────────────────────────────
     [JsonPropertyName("output_bit_depth")] public int OutputBitDepth { get; set; } = 10;
-    // Monitor-Auswahl: bevorzugt über stabile Identität (key = monitorDevicePath, label = EDID-Name),
-    // damit Umstecken / geänderte Enumerations-Reihenfolge die Auswahl NICHT verwürfelt. Der Index
-    // bleibt als Abwärtskompat-Fallback (alte Configs ohne key) erhalten.
+    // Monitor selection: preferably via stable identity (key = monitorDevicePath, label = EDID name),
+    // so that replugging / a changed enumeration order does NOT scramble the selection. The index
+    // is kept as a backward-compat fallback (old configs without a key).
     [JsonPropertyName("source_display")]   public int SourceDisplay { get; set; } = 0;
     [JsonPropertyName("target_display")]   public int TargetDisplay { get; set; } = 0;
     [JsonPropertyName("source_key")]       public string SourceKey { get; set; } = "";
     [JsonPropertyName("source_label")]     public string SourceLabel { get; set; } = "";
     [JsonPropertyName("target_key")]       public string TargetKey { get; set; } = "";
     [JsonPropertyName("target_label")]     public string TargetLabel { get; set; } = "";
-    // output_mode: "windowed" | "borderless" | "fullscreen_block" (Maus-Sperre) | "exclusive".
-    // Leer = aus dem alten `windowed`-Flag abgeleitet (Abwaerts-Kompatibilitaet).
+    // output_mode: "windowed" | "borderless" | "fullscreen_block" (mouse lock) | "exclusive".
+    // Empty = derived from the old `windowed` flag (backward compatibility).
     [JsonPropertyName("output_mode")]      public string OutputMode { get; set; } = "";
     [JsonPropertyName("windowed")]         public bool Windowed { get; set; } = true;
     [JsonPropertyName("window_width")]     public int WindowWidth { get; set; } = 1280;
     [JsonPropertyName("window_height")]    public int WindowHeight { get; set; } = 720;
-    // 0 = aus dem Ziel-Display ableiten; >0 = Override.
+    // 0 = derive from the target display; >0 = override.
     [JsonPropertyName("output_width")]     public int OutputWidth { get; set; } = 0;
     [JsonPropertyName("output_height")]    public int OutputHeight { get; set; } = 0;
 
-    /// <summary>Operator-String → Shader-Konstante (muss zu Tonemap.hlsl passen).</summary>
+    /// <summary>Operator string → shader constant (must match Tonemap.hlsl).</summary>
     public int OperatorId => Operator?.ToLowerInvariant() switch
     {
         "reinhard" => 1,
@@ -83,7 +83,7 @@ public sealed class MirrorConfig
         _          => 0, // bt2390 (Default)
     };
 
-    /// <summary>Effektiver Fenster-Modus — leeres output_mode faellt auf das alte windowed-Flag zurueck.</summary>
+    /// <summary>Effective window mode — an empty output_mode falls back to the old windowed flag.</summary>
     public string ResolveOutputMode()
     {
         var m = (OutputMode ?? "").Trim().ToLowerInvariant();
@@ -91,11 +91,11 @@ public sealed class MirrorConfig
         return m;
     }
 
-    /// <summary>Effektiver Quellen-Modus: "window" oder (Default) "monitor".</summary>
+    /// <summary>Effective source mode: "window" or (default) "monitor".</summary>
     public string ResolveCaptureMode()
         => (CaptureMode ?? "").Trim().ToLowerInvariant() == "window" ? "window" : "monitor";
 
-    // ── Schluessel-Whitelist (gegen Injection; LIVE wirkt sofort) ─────────
+    // ── Key whitelist (against injection; LIVE takes effect immediately) ─────────
     public static readonly HashSet<string> LiveKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "tonemap_enabled", "operator", "source_peak_nits", "target_paperwhite",
@@ -129,19 +129,19 @@ public sealed class MirrorConfig
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[config] Lesefehler ({path}): {ex.Message} — nutze Defaults/letzten Stand.");
+            Console.Error.WriteLine($"[config] Read error ({path}): {ex.Message} — using defaults/last state.");
             return new MirrorConfig();
         }
     }
 
-    /// <summary>Ganzes Objekt schreiben (von der GUI genutzt).</summary>
+    /// <summary>Write the whole object (used by the GUI).</summary>
     public void Save(string path) => File.WriteAllText(path, JsonSerializer.Serialize(this, WriteOpts));
 
     /// <summary>
-    /// Read-modify-write: nur whitelisted Schluessel aus <paramref name="patch"/> in die
-    /// bestehende Datei mergen (unbekannte Felder bleiben erhalten). Spiegelt die Semantik
-    /// von cockpit/services/mirror_control.set_config — daher bleibt der WinRM-Pfad kompatibel.
-    /// Gibt das frische JSON-Objekt zurueck.
+    /// Read-modify-write: merge only whitelisted keys from <paramref name="patch"/> into the
+    /// existing file (unknown fields are preserved). Mirrors the semantics
+    /// of cockpit/services/mirror_control.set_config — so the WinRM path stays compatible.
+    /// Returns the fresh JSON object.
     /// </summary>
     public static JsonObject MergePatch(string path, JsonObject patch)
     {

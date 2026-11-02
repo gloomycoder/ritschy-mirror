@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <!-- Per-Monitor-V2 DPI-Awareness: Koordinaten/Groessen in echten Pixeln,
-       kein Windows-Scaling das die Capture-/Display-Geometrie verfaelscht. -->
+  <!-- Per-Monitor-V2 DPI awareness: coordinates/sizes in real pixels,
+       no Windows scaling that distorts the capture/display geometry. -->
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>

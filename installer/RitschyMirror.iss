@@ -2,10 +2,10 @@
 ;  RitschyMirror - Inno Setup Skript (v1.0)
 ;  Screen Mirror Tool for capture cards (HDR -> SDR tonemapping).
 ;
-;  Per-User-Installation (KEIN Administrator / UAC noetig) - installiert nach
-;  %LOCALAPPDATA%\Programs\RitschyMirror. Exe + Config liegen zusammen in einem
-;  beschreibbaren Ordner (die App schreibt mirror_config.json / app_settings.json
-;  / mirror.log daneben). Deinstallation entfernt den Ordner restlos.
+;  Per-user installation (NO administrator / UAC needed) - installs to
+;  %LOCALAPPDATA%\Programs\RitschyMirror. Exe + config live together in one
+;  writable folder (the app writes mirror_config.json / app_settings.json
+;  / mirror.log next to it). Uninstalling removes the folder completely.
 ;
 ;  Build:  "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" RitschyMirror.iss
 ; ============================================================================
@@ -15,11 +15,11 @@
 #define MyAppPublisher "RitschyRigz"
 #define MyAppURL "https://github.com/RitschyRigz/ritschy-mirror"
 #define MyAppExeName "RitschyMirror.exe"
-; Projekt-Root relativ zur .iss (liegt in installer\) — portabel, kein absoluter Build-Pfad.
+; Project root relative to the .iss (located in installer\) — portable, no absolute build path.
 #define SrcDir SourcePath + ".."
 
 [Setup]
-; Eindeutige App-ID (fest - NICHT aendern, sonst erkennt ein Update die alte Installation nicht).
+; Unique app ID (fixed - do NOT change, otherwise an update will not recognize the old installation).
 AppId={{8F2C6A14-9B3D-4E7A-AC51-1D9E2F6B0C77}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -38,14 +38,14 @@ DisableProgramGroupPage=yes
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 
-; Per-User: keine Admin-Rechte, keine UAC-Abfrage.
+; Per-user: no admin rights, no UAC prompt.
 PrivilegesRequired=lowest
 
 ; 64-bit only (self-contained win-x64 Build).
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
-; Laufende App vor (De-)Installation per Restart Manager schliessen.
+; Close the running app via Restart Manager before (un)installation.
 CloseApplications=yes
 RestartApplications=no
 
@@ -69,7 +69,7 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescr
 
 [Files]
 Source: "{#SrcDir}\publish\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-; Standard-Config nur anlegen, falls noch keine da ist (Update ueberschreibt User-Einstellungen NICHT).
+; Only create the default config if none exists yet (an update does NOT overwrite user settings).
 Source: "{#SrcDir}\installer\default_config\mirror_config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 
 [Icons]
@@ -79,8 +79,8 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-; Autostart über DENSELBEN HKCU\Run-Eintrag, den auch der Settings-Haken verwaltet —
-; so gibt es nur EINEN Mechanismus (kein Doppel-Autostart) und der Haken zeigt die Wahrheit.
+; Autostart via the SAME HKCU\Run entry that the settings checkbox manages —
+; so there is only ONE mechanism (no double autostart) and the checkbox shows the truth.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; \
   ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: autostart; \
   Flags: uninsdeletevalue
@@ -89,5 +89,5 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-; Vom Programm erzeugte Dateien (Config/Settings/Log) + Ordner restlos entfernen.
+; Remove files created by the program (config/settings/log) + folder completely.
 Type: filesandordirs; Name: "{app}"

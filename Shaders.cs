@@ -1,10 +1,10 @@
 namespace RitschyMirror;
 
 /// <summary>
-/// HLSL-Quelltext, zur Laufzeit via D3DCompiler kompiliert. Vertex-Shader zeichnet
-/// ein bildschirmfuellendes Dreieck (ohne Vertex-Buffer); Pixel-Shader macht
-/// HDR→SDR-Tonemapping + Bildkorrekturen. Die cbuffer-Felder MUESSEN feldweise zur
-/// Renderer-Params-Struktur passen (gleiche Reihenfolge/Groesse, 16-Byte-aligned).
+/// HLSL source, compiled at runtime via D3DCompiler. The vertex shader draws
+/// a full-screen triangle (no vertex buffer); the pixel shader does
+/// HDR→SDR tonemapping + image corrections. The cbuffer fields MUST match the
+/// renderer's params struct field by field (same order/size, 16-byte aligned).
 /// </summary>
 public static class Shaders
 {
@@ -14,19 +14,19 @@ SamplerState Smp : register(s0);
 
 cbuffer Params : register(b0)
 {
-    float Exposure;          // Belichtung in Stops
-    float SrcPeak;           // Quell-Spitzenluminanz in WEISSPUNKT-Einheiten (1.0 = kein Headroom)
-    float TargetPaperwhite;  // SDR-Weisspunkt in nits (nur noch fuer den HDR-Ausgabe-Pfad)
+    float Exposure;          // Exposure in stops
+    float SrcPeak;           // Source peak luminance in WHITE-POINT units (1.0 = no headroom)
+    float TargetPaperwhite;  // SDR white point in nits (only used for the HDR output path now)
     float Saturation;
     float Contrast;
     float Gamma;
     int   OperatorId;        // 0 bt2390, 1 reinhard, 2 hable, 3 aces
     int   TonemapEnabled;    // 0/1
-    int   SrcIsLinear;       // 1 = Puffer ist bereits linear (FP16/scRGB), 0 = sRGB-kodiert
-    int   OutputIsHdr;       // 1 = HDR-Passthrough (kein Tonemap, scRGB raus)
-    float2 CropMin;          // Quell-Crop in UV (0..1), Default (0,0)
-    float2 CropMax;          // Quell-Crop in UV (0..1), Default (1,1)
-    float SrcScale;          // Puffer-Wert → Arbeitslicht (1.0 = Weisspunkt)
+    int   SrcIsLinear;       // 1 = buffer is already linear (FP16/scRGB), 0 = sRGB-encoded
+    int   OutputIsHdr;       // 1 = HDR passthrough (no tonemap, scRGB out)
+    float2 CropMin;          // Source crop in UV (0..1), default (0,0)
+    float2 CropMax;          // Source crop in UV (0..1), default (1,1)
+    float SrcScale;          // Buffer value → working light (1.0 = white point)
     float _pad;
 };
 
@@ -41,7 +41,7 @@ VSOut VSMain(uint id : SV_VertexID)
     return o;
 }
 
-// ── Farb-Helfer ───────────────────────────────────────────────────────────
+// ── Color helpers ───────────────────────────────────────────────────────────
 float3 SrgbToLinear(float3 c)
 {
     return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
@@ -53,10 +53,10 @@ float3 LinearToSrgb(float3 c)
 }
 float Luminance(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 
-// ── Tonemap-Operatoren (Eingabe linear, 1.0 = Weisspunkt) ──────────────────
+// ── Tonemap operators (input linear, 1.0 = white point) ──────────────────
 float3 TmReinhard(float3 x, float wp)
 {
-    // Extended Reinhard mit Weisspunkt
+    // Extended Reinhard with white point
     float3 num = x * (1.0 + x / (wp * wp));
     return num / (1.0 + x);
 }
@@ -75,37 +75,37 @@ float3 TmAces(float3 x)
     const float a=2.51,b=0.03,c=2.43,d=0.59,e=0.14;
     return saturate((x*(a*x+b))/(x*(c*x+d)+e));
 }
-// Vereinfachtes BT.2390-artiges Roll-off auf der Luminanz
+// Simplified BT.2390-style roll-off on the luminance
 float3 TmBt2390(float3 x, float wp)
 {
     float L = max(Luminance(x), 1e-5);
-    float Lt = (L * (1.0 + L / (wp * wp))) / (1.0 + L); // weicher Knie-Verlauf
+    float Lt = (L * (1.0 + L / (wp * wp))) / (1.0 + L); // soft knee curve
     return x * (Lt / L);
 }
 
 float4 PSMain(VSOut i) : SV_Target
 {
-    // Quell-Crop: sichtbare UV (0..1 ueber den Viewport) auf das Crop-Rechteck der
-    // Quelle abbilden. Ohne Crop ist CropMin=(0,0)/CropMax=(1,1) → Identitaet.
+    // Source crop: map the visible UV (0..1 across the viewport) onto the source's
+    // crop rectangle. Without crop CropMin=(0,0)/CropMax=(1,1) → identity.
     float2 suv = CropMin + i.uv * (CropMax - CropMin);
     float3 col = Src.Sample(Smp, suv).rgb;
 
-    // Eingangsfarbraum -> lineares Arbeitslicht (1.0 = Weisspunkt).
-    // WICHTIG: DXGI Desktop Duplication und WGC liefern mit R16G16B16A16_FLOAT IMMER
-    // lineares scRGB — auch wenn der Monitor im SDR-Modus laeuft (nachgemessen). Ein
-    // sRGB-Dekodieren waere dort ein ZWEITES Gamma und macht das Bild dramatisch zu
-    // dunkel. Dekodiert wird also nur ein wirklich sRGB-kodierter Puffer (8-bit-Quellen).
+    // Input color space -> linear working light (1.0 = white point).
+    // IMPORTANT: DXGI Desktop Duplication and WGC with R16G16B16A16_FLOAT ALWAYS deliver
+    // linear scRGB — even when the monitor runs in SDR mode (measured). sRGB-decoding
+    // there would be a SECOND gamma and makes the image dramatically too dark. So only a
+    // truly sRGB-encoded buffer (8-bit sources) gets decoded.
     if (SrcIsLinear)
         col = max(col, 0);
     else
         col = SrgbToLinear(saturate(col));
-    col *= SrcScale;   // scRGB: 80/Weisspunkt · SDR-Quelle: 1.0 (Weiss ist schon Weiss)
+    col *= SrcScale;   // scRGB: 80/white point · SDR source: 1.0 (white is already white)
 
     col *= exp2(Exposure);
 
-    // Tonemapping nur, wenn die Quelle ueberhaupt Headroom UEBER dem Weisspunkt hat.
-    // Eine SDR-Quelle (SrcPeak == 1) hat keinen — sie zu rollen wuerde ein bereits
-    // fertiges 1:1-Bild bloss abdunkeln. So merkt der Tonemapper selbst, ob HDR anliegt.
+    // Tonemap only if the source has any headroom ABOVE the white point at all.
+    // An SDR source (SrcPeak == 1) has none — rolling it off would merely darken an already
+    // finished 1:1 image. This way the tonemapper itself notices whether HDR is present.
     if (TonemapEnabled && !OutputIsHdr && SrcPeak > 1.0001)
     {
         float wp = SrcPeak;
@@ -115,21 +115,21 @@ float4 PSMain(VSOut i) : SV_Target
         else                      col = TmBt2390(col, wp);
     }
 
-    // Saettigung
+    // Saturation
     float l = Luminance(col);
     col = lerp(float3(l, l, l), col, Saturation);
-    // Kontrast um Mittelgrau
+    // Contrast around mid-gray
     col = (col - 0.18) * Contrast + 0.18;
     col = max(col, 0);
-    // Gamma-Trim
+    // Gamma trim
     col = pow(max(col, 1e-6), 1.0 / max(Gamma, 1e-3));
 
     if (OutputIsHdr)
-        return float4(col * TargetPaperwhite / 80.0, 1); // zurueck nach scRGB
+        return float4(col * TargetPaperwhite / 80.0, 1); // back to scRGB
     return float4(LinearToSrgb(col), 1);
 }
 
-// Maus-Cursor: bereits dekodierte BGRA-Textur (display-referred) direkt mit Alpha ausgeben.
+// Mouse cursor: already-decoded BGRA texture (display-referred), output directly with alpha.
 float4 PSCursor(VSOut i) : SV_Target
 {
     return Src.Sample(Smp, i.uv);

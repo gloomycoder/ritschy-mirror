@@ -1,33 +1,33 @@
 <#
-  install.ps1 - RitschyMirror lokal installieren (auf JEDEM Windows-PC).
-  Kopiert das Publish-Ergebnis nach %LOCALAPPDATA%\RitschyMirror, legt Start-Menue- +
-  (optional) Autostart-Verknuepfung an und reserviert - wenn als Admin gestartet -
-  URL-ACL + Firewall fuer den HTTP-Agenten (damit das Cockpit ihn uebers Netz erreicht).
+  install.ps1 - install RitschyMirror locally (on ANY Windows PC).
+  Copies the publish output to %LOCALAPPDATA%\RitschyMirror, creates a Start menu +
+  (optional) autostart shortcut and - when run as admin - reserves a
+  URL ACL + firewall rule for the HTTP agent (so the cockpit can reach it over the network).
 
-  Aufruf:
-    powershell -ExecutionPolicy Bypass -File install.ps1                 # Standard (Port 8788)
-    powershell -ExecutionPolicy Bypass -File install.ps1 -AgentPort 8790 # anderer Port
-    powershell -ExecutionPolicy Bypass -File install.ps1 -NoAutostart    # ohne Login-Autostart
-  Fuer URL-ACL/Firewall (Netz-Erreichbarkeit) als Administrator ausfuehren.
+  Usage:
+    powershell -ExecutionPolicy Bypass -File install.ps1                 # default (port 8788)
+    powershell -ExecutionPolicy Bypass -File install.ps1 -AgentPort 8790 # different port
+    powershell -ExecutionPolicy Bypass -File install.ps1 -NoAutostart    # without login autostart
+  Run as administrator for URL ACL/firewall (network reachability).
 
-  ASCII-only (Windows PowerShell 5.1 liest .ps1 ohne BOM in der ANSI-Codepage).
+  ASCII-only (Windows PowerShell 5.1 reads .ps1 files without BOM in the ANSI code page).
 #>
 [CmdletBinding()]
 param(
     [int]$AgentPort = 8788,
     [switch]$NoAutostart,
-    [switch]$NoNetwork   # URL-ACL + Firewall-Regel ueberspringen (nur lokal/localhost)
+    [switch]$NoNetwork   # skip URL ACL + firewall rule (local/localhost only)
 )
 $ErrorActionPreference = "Stop"
 $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $src = Join-Path $dir "publish"
 $exeSrc = Join-Path $src "RitschyMirror.exe"
-if (-not (Test-Path $exeSrc)) { throw "Kein publish/RitschyMirror.exe - erst publish.ps1 ausfuehren." }
+if (-not (Test-Path $exeSrc)) { throw "No publish/RitschyMirror.exe - run publish.ps1 first." }
 
 $dest = Join-Path $env:LOCALAPPDATA "RitschyMirror"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
-# Dateien kopieren - vorhandene Config bei Updates NICHT ueberschreiben.
+# Copy files - do NOT overwrite an existing config on updates.
 $keep = @("mirror_config.json", "app_settings.json")
 Get-ChildItem $src -File | ForEach-Object {
     $target = Join-Path $dest $_.Name
@@ -35,20 +35,20 @@ Get-ChildItem $src -File | ForEach-Object {
     Copy-Item $_.FullName $target -Force
 }
 $exe = Join-Path $dest "RitschyMirror.exe"
-Write-Host "Installiert nach: $dest" -ForegroundColor Green
+Write-Host "Installed to: $dest" -ForegroundColor Green
 
-# Start-Menue-Verknuepfung
+# Start menu shortcut
 $wsh = New-Object -ComObject WScript.Shell
 function New-Lnk($path) { $l = $wsh.CreateShortcut($path); $l.TargetPath = $exe; $l.WorkingDirectory = $dest; $l.Save() }
 New-Lnk (Join-Path ([Environment]::GetFolderPath("Programs")) "RitschyMirror.lnk")
 
-# Login-Autostart
+# Login autostart
 if (-not $NoAutostart) {
     New-Lnk (Join-Path ([Environment]::GetFolderPath("Startup")) "RitschyMirror.lnk")
-    Write-Host "Login-Autostart eingerichtet." -ForegroundColor Green
+    Write-Host "Login autostart configured." -ForegroundColor Green
 }
 
-# Netz-Erreichbarkeit des HTTP-Agenten (braucht Admin) - sonst Fallback auf localhost.
+# Network reachability of the HTTP agent (needs admin) - otherwise fall back to localhost.
 if (-not $NoNetwork) {
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
     if ($isAdmin) {
@@ -56,14 +56,14 @@ if (-not $NoNetwork) {
             $url = "http://+:$AgentPort/"
             cmd /c "netsh http add urlacl url=$url user=$env:USERNAME" | Out-Null
             cmd /c "netsh advfirewall firewall add rule name=`"RitschyMirror Agent`" dir=in action=allow protocol=TCP localport=$AgentPort" | Out-Null
-            Write-Host "URL-ACL + Firewall fuer $url gesetzt." -ForegroundColor Green
-        } catch { Write-Host "URL-ACL/Firewall fehlgeschlagen: $_" -ForegroundColor Yellow }
+            Write-Host "URL ACL + firewall set for $url." -ForegroundColor Green
+        } catch { Write-Host "URL ACL/firewall failed: $_" -ForegroundColor Yellow }
     } else {
-        Write-Host "Hinweis: nicht als Admin - Agent ist nur via localhost erreichbar." -ForegroundColor Yellow
-        Write-Host "  Fuer Cockpit-Fernsteuerung install.ps1 EINMAL als Admin laufen lassen (URL-ACL+Firewall)." -ForegroundColor Yellow
+        Write-Host "Note: not running as admin - agent is only reachable via localhost." -ForegroundColor Yellow
+        Write-Host "  For cockpit remote control, run install.ps1 ONCE as admin (URL ACL+firewall)." -ForegroundColor Yellow
     }
 }
 
 Write-Host ""
-Write-Host "Starten: `"$exe`"  -> Tray-Icon -> Einstellungen." -ForegroundColor Cyan
-Write-Host "Cockpit: Connector 'gaming_pc' -> Feld 'agent_port' = $AgentPort (host = IP dieses PCs)." -ForegroundColor Cyan
+Write-Host "Start: `"$exe`"  -> tray icon -> Settings." -ForegroundColor Cyan
+Write-Host "Cockpit: connector 'gaming_pc' -> field 'agent_port' = $AgentPort (host = IP of this PC)." -ForegroundColor Cyan

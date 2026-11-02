@@ -131,7 +131,7 @@ async function api(path, method = "GET", body) {
   return r.status === 204 ? null : r.json();
 }
 const showErr = () => { $("conn").innerHTML = '<span class="err">Agent nicht erreichbar</span>'; };
-// LIVE wirkt sofort; STRUCT braucht einen Render-Neustart, wenn gerade gespiegelt wird.
+// LIVE takes effect immediately; STRUCT needs a render restart if mirroring is currently active.
 const patch = (obj) => api("/config", "POST", obj).then(applyStatus).catch(showErr);
 async function patchStruct(obj) {
   try { await api("/config", "POST", obj); if (running()) await api("/restart", "POST"); await poll(); }
@@ -141,7 +141,7 @@ async function patchStruct(obj) {
 const DEC = { target_paperwhite:0, source_peak_nits:0 };
 const fmt = (id, v) => { const e = $(id + "_v"); if (e) e.textContent = Number(v).toFixed(DEC[id] ?? 2); };
 
-// ── Live-Slider (Bild + Crop) ──
+// ── Live sliders (image + crop) ──
 const SLIDERS = ["saturation","contrast","gamma","exposure","target_paperwhite","source_peak_nits",
                  "crop_x","crop_y","crop_w","crop_h"];
 SLIDERS.forEach(id => {
@@ -150,20 +150,20 @@ SLIDERS.forEach(id => {
   el.addEventListener("change", () => patch({ [id]: (DEC[id] === 0 ? parseInt(el.value,10) : parseFloat(el.value)) }));
 });
 
-// ── Live-Checkboxen + Selects ──
+// ── Live checkboxes + selects ──
 ["tonemap_enabled","show_cursor","vsync","keep_awake"].forEach(id =>
   $(id).addEventListener("change", e => patch({ [id]: e.target.checked })));
 $("operator").addEventListener("change", e => patch({ operator: e.target.value }));
 $("layout_mode").addEventListener("change", e => patch({ layout_mode: e.target.value }));
 $("content_offset_y").addEventListener("change", e => patch({ content_offset_y: parseInt(e.target.value || "0", 10) }));
 
-// ── Struct-Felder (Neustart wenn aktiv) ──
+// ── Struct fields (restart if active) ──
 $("output_mode").addEventListener("change", e => patchStruct({ output_mode: e.target.value }));
 $("output_bit_depth").addEventListener("change", e => patchStruct({ output_bit_depth: parseInt(e.target.value,10) }));
 $("window_width").addEventListener("change", e => patchStruct({ window_width: parseInt(e.target.value||"1280",10) }));
 $("window_height").addEventListener("change", e => patchStruct({ window_height: parseInt(e.target.value||"720",10) }));
 
-// ── Monitore (Identität wie die App, Neustart wenn aktiv) ──
+// ── Monitors (identity like the app, restart if active) ──
 async function pickMonitor(which) {
   const d = displays[$(which).selectedIndex];
   if (!d) return;
@@ -175,7 +175,7 @@ async function pickMonitor(which) {
 $("src").addEventListener("change", () => pickMonitor("src"));
 $("dst").addEventListener("change", () => pickMonitor("dst"));
 
-// ── Quellen-Modus + Fenster-Auswahl (Identität exe+title, Neustart wenn aktiv) ──
+// ── Source mode + window selection (identity exe+title, restart if active) ──
 $("capture_mode").addEventListener("change", e => patchStruct({ capture_mode: e.target.value }));
 $("refresh_win").addEventListener("click", loadWindows);
 $("window_pick").addEventListener("change", pickWindow);
@@ -203,7 +203,7 @@ function syncWindowSelection(cfg) {
   if (i >= 0) $("window_pick").selectedIndex = i;
 }
 
-// Ein Fenster zu wählen heißt Fenster-Modus → capture_mode gleich mitziehen.
+// Choosing a window means window mode → switch capture_mode along with it.
 async function pickWindow() {
   const w = windows[$("window_pick").selectedIndex];
   if (!w) return;
@@ -256,7 +256,7 @@ function applyStatus(st) {
   t.className = "toggle" + (run ? "" : " stopped");
   t.disabled = false;
   const cfg = st.config || {}; lastConfig = cfg;
-  if (!booted) {  // Steuerelemente EINMAL aus der Config initialisieren (kein Drag-Clobber)
+  if (!booted) {  // initialize the controls ONCE from the config (no drag clobbering)
     booted = true;
     SLIDERS.forEach(id => { if (cfg[id] != null) { $(id).value = cfg[id]; fmt(id, cfg[id]); } });
     ["tonemap_enabled","show_cursor","vsync","keep_awake"].forEach(id => { if (cfg[id] != null) $(id).checked = !!cfg[id]; });

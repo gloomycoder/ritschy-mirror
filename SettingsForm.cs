@@ -5,13 +5,13 @@ using System.Windows.Forms;
 namespace RitschyMirror;
 
 /// <summary>
-/// Lokale Einstellungs-GUI — dieselben Parameter, die sonst remote ueber das Cockpit
-/// gestellt werden. Schreibt live in mirror_config.json (Engine laedt LIVE-Keys sofort
-/// nach); Struktur-Aenderungen (Display/Modus/Bit-Tiefe) brauchen einen Render-Neustart.
-/// App-Ebene (Agent/Autostart) geht in app_settings.json.
+/// Local settings GUI — the same parameters that are otherwise set remotely via the cockpit.
+/// Writes live to mirror_config.json (the engine reloads LIVE keys immediately);
+/// structural changes (display/mode/bit depth) require a render restart.
+/// App-level settings (agent/autostart) go to app_settings.json.
 ///
-/// Layout bewusst MANUELL (Location/Size, scrollbares Panel) — verschachtelte
-/// AutoSize-Container (FlowLayout→GroupBox→TableLayout) kollabierten auf Hoehe 0.
+/// Layout is deliberately MANUAL (Location/Size, scrollable panel) — nested
+/// AutoSize containers (FlowLayout→GroupBox→TableLayout) collapsed to height 0.
 /// </summary>
 public sealed class SettingsForm : Form
 {
@@ -44,8 +44,8 @@ public sealed class SettingsForm : Form
         ClientSize = new Size(620, 780);
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(520, 420);
-        // Auf kleinen/kurzen Bildschirmen nie höher als der Arbeitsbereich — sonst rutscht die
-        // untere Button-Leiste (Schließen / Auf Updates prüfen) aus dem sichtbaren Fenster.
+        // On small/short screens never taller than the working area — otherwise the
+        // bottom button bar (Close / Check for updates) slides out of the visible window.
         var wa = Screen.PrimaryScreen?.WorkingArea;
         if (wa is { } a && Height > a.Height - 16) Height = a.Height - 16;
 
@@ -73,8 +73,8 @@ public sealed class SettingsForm : Form
         bottom.Controls.AddRange(new Control[] { start, restart, close, update });
     }
 
-    /// <summary>Start mit Vorab-Check — bei fehlendem Quell-/Ziel-Monitor klare Meldung statt
-    /// still den falschen Bildschirm zu spiegeln.</summary>
+    /// <summary>Start with a preflight check — if the source/target monitor is missing, show a clear
+    /// message instead of silently mirroring the wrong screen.</summary>
     private void StartWithCheck()
     {
         var err = _engine.Preflight();
@@ -86,11 +86,11 @@ public sealed class SettingsForm : Form
         _engine.Start();
     }
 
-    // ── Persistenz ────────────────────────────────────────────────────────
+    // ── Persistence ────────────────────────────────────────────────────────
     private void SaveCfg() { if (_loading) return; try { _cfg.Save(_engine.ConfigPath); } catch { } }
     private void SaveApp() { if (_loading) return; _app.Save(_appSettingsPath); }
 
-    // ── Layout-Helfer (manuell, y-Cursor) ────────────────────────────────
+    // ── Layout helpers (manual, y cursor) ────────────────────────────────
     private void Header(string text)
     {
         _y += 8;
@@ -151,14 +151,14 @@ public sealed class SettingsForm : Form
         return c;
     }
 
-    // ── Gruppen ───────────────────────────────────────────────────────────
+    // ── Groups ───────────────────────────────────────────────────────────
     private void BuildSourceTarget()
     {
         Header("Quelle / Ziel & Modus");
         _displays = MirrorEngine.EnumerateDisplays();
         var names = DisplayNames();
 
-        // Quellen-Modus: ganzer Monitor (Desktop Duplication) ODER ein Fenster (Windows.Graphics.Capture).
+        // Source mode: whole monitor (Desktop Duplication) OR a single window (Windows.Graphics.Capture).
         _modeCombo = ComboRow("Quellen-Modus", new[] { "monitor", "window" }, _cfg.ResolveCaptureMode(),
                               s => _cfg.CaptureMode = s);
         Note("monitor = ganzer Bildschirm  ·  window = nur EIN Fenster / Vollbild-App");
@@ -173,7 +173,7 @@ public sealed class SettingsForm : Form
         _panel.Controls.Add(_srcCombo);
         _y += ROW;
 
-        // Fenster-Quelle (Modus „window") — identitäts-stabil über Exe + Titel, wie die Monitor-Auswahl.
+        // Window source ("window" mode) — identity-stable via exe + title, like the monitor selection.
         _windows = WindowEnum.List();
         Lbl("Fenster  (Modus „window\")");
         _winCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(CX, _y), Width = 330 };
@@ -201,7 +201,7 @@ public sealed class SettingsForm : Form
         _panel.Controls.Add(refresh);
         _y += ROW;
 
-        // Hinweis, falls eine gespeicherte Auswahl gerade nicht verbunden ist (bleibt gespeichert).
+        // Note if a saved selection is currently not connected (it stays saved).
         if (siSel < 0 && HasIdentity(_cfg.SourceKey, _cfg.SourceLabel))
             Note($"⚠ Gespeicherte Quelle \"{LabelOf(_cfg.SourceKey, _cfg.SourceLabel)}\" aktuell nicht verbunden.");
         if (diSel < 0 && HasIdentity(_cfg.TargetKey, _cfg.TargetLabel))
@@ -261,7 +261,7 @@ public sealed class SettingsForm : Form
         Note("Agent-/Bind-/Port-Änderungen wirken nach App-Neustart.");
     }
 
-    // ── Über / Update ─────────────────────────────────────────────────────
+    // ── About / Update ─────────────────────────────────────────────────────
     private void BuildAbout()
     {
         Header("Über");
@@ -275,8 +275,8 @@ public sealed class SettingsForm : Form
         Note("Updates prüfst du unten über „↻ Auf Updates prüfen\".");
     }
 
-    /// <summary>Großer Button unten: GitHub auf eine neuere Version prüfen und anbieten,
-    /// die Download-Seite zu öffnen.</summary>
+    /// <summary>Large button at the bottom: check GitHub for a newer version and offer to
+    /// open the download page.</summary>
     private async void CheckForUpdates(Button btn)
     {
         var old = btn.Text;
@@ -318,8 +318,8 @@ public sealed class SettingsForm : Form
     private static string LabelOf(string key, string label) =>
         !string.IsNullOrWhiteSpace(label) ? label : key;
 
-    /// <summary>Combo-Index für die gespeicherte Auswahl: per Key → eindeutigem Label →
-    /// (nur ohne Identität) Index. -1 = Identität gesetzt, aber kein passendes Display da.</summary>
+    /// <summary>Combo index for the saved selection: by key → unique label →
+    /// (only without identity) index. -1 = identity set, but no matching display present.</summary>
     private int FindByIdentity(string key, string label, int index)
     {
         if (HasIdentity(key, label))
@@ -339,7 +339,7 @@ public sealed class SettingsForm : Form
         return (index >= 0 && index < _displays.Count) ? index : -1;
     }
 
-    /// <summary>Auswahl persistieren: Index (Abwärtskompat) UND stabile Identität (key+label).</summary>
+    /// <summary>Persist the selection: index (backward compat) AND stable identity (key+label).</summary>
     private void StoreSelection(ComboBox combo, bool src)
     {
         int i = combo.SelectedIndex;
@@ -364,15 +364,15 @@ public sealed class SettingsForm : Form
         _loading = false;
     }
 
-    // ── Fenster-Auswahl (Fenster-Capture-Modus) ───────────────────────────
+    // ── Window selection (window capture mode) ───────────────────────────
     private bool HasWindowIdentity() =>
         !string.IsNullOrWhiteSpace(_cfg.WindowExe) || !string.IsNullOrWhiteSpace(_cfg.WindowTitle);
 
     private string WindowLabel() =>
         string.IsNullOrWhiteSpace(_cfg.WindowExe) ? _cfg.WindowTitle : $"{_cfg.WindowTitle} ({_cfg.WindowExe})";
 
-    /// <summary>Combo-Index für die gespeicherte Fenster-Identität: gleiche Exe + exakter Titel →
-    /// erste gleiche Exe → exakter Titel. -1 = nicht gefunden (Fenster nicht offen).</summary>
+    /// <summary>Combo index for the saved window identity: same exe + exact title →
+    /// first same exe → exact title. -1 = not found (window not open).</summary>
     private int FindWindowIndex()
     {
         if (!HasWindowIdentity()) return -1;
@@ -384,8 +384,8 @@ public sealed class SettingsForm : Form
         return _windows.FindIndex(w => string.Equals(w.Title, _cfg.WindowTitle, OIC));
     }
 
-    /// <summary>Fenster-Auswahl persistieren (Exe + Titel) und den Quellen-Modus auf „window"
-    /// mitziehen — ein Fenster zu wählen heißt: Fenster spiegeln.</summary>
+    /// <summary>Persist the window selection (exe + title) and switch the source mode to "window"
+    /// along with it — choosing a window means: mirror the window.</summary>
     private void StoreWindow()
     {
         int i = _winCombo.SelectedIndex;
@@ -411,7 +411,7 @@ public sealed class SettingsForm : Form
         _loading = false;
     }
 
-    // ── Login-Autostart (HKCU\...\Run) ────────────────────────────────────
+    // ── Login autostart (HKCU\...\Run) ────────────────────────────────────
     private static bool IsLoginAutostart()
     {
         try { using var k = Registry.CurrentUser.OpenSubKey(RunKey); return k?.GetValue(RunValue) != null; }
@@ -426,6 +426,6 @@ public sealed class SettingsForm : Form
             if (on) k!.SetValue(RunValue, $"\"{Application.ExecutablePath}\"");
             else k!.DeleteValue(RunValue, throwOnMissingValue: false);
         }
-        catch (Exception ex) { _engine.Log("Login-Autostart setzen fehlgeschlagen: " + ex.Message); }
+        catch (Exception ex) { _engine.Log("Failed to set login autostart: " + ex.Message); }
     }
 }

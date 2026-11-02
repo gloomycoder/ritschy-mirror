@@ -6,10 +6,10 @@ using System.Windows.Forms;
 namespace RitschyMirror;
 
 /// <summary>
-/// Tray-Host: die App startet beim Login, wartet idle im Tray und hostet den HTTP-Agenten.
-/// "Mirror starten" beginnt das Rendern, "Mirror stoppen" beendet es — die App bleibt im
-/// Tray und der Agent erreichbar. Loest die fruehere Session-0-Scheduled-Task-Kruecke
-/// (laeuft in der interaktiven Session → immer Display-Zugriff).
+/// Tray host: the app starts at login, waits idle in the tray and hosts the HTTP agent.
+/// "Start mirror" begins rendering, "Stop mirror" ends it — the app stays in the
+/// tray and the agent remains reachable. Replaces the former session-0 scheduled-task workaround
+/// (runs in the interactive session → always has display access).
 /// </summary>
 public sealed class TrayContext : ApplicationContext
 {
@@ -24,16 +24,16 @@ public sealed class TrayContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _uiTimer;
     private SettingsForm? _settings;
 
-    private readonly Icon _iconOn;       // Tray grün = Mirror läuft
-    private readonly Icon _iconOff;      // Tray rot  = Mirror gestoppt
-    private bool? _lastRunning;          // nur bei Statuswechsel Icon tauschen
+    private readonly Icon _iconOn;       // tray green = mirror running
+    private readonly Icon _iconOff;      // tray red   = mirror stopped
+    private bool? _lastRunning;          // only swap the icon on a status change
 
-    // Single-Instance: zweite Instanz signalisiert hierüber „Einstellungen zeigen".
+    // Single instance: a second instance signals "show settings" through this.
     private EventWaitHandle? _showEvent;
     private RegisteredWaitHandle? _showReg;
-    private readonly Control _marshal = new();  // UI-Thread-Marshaling (Handle-Anker)
+    private readonly Control _marshal = new();  // UI-thread marshaling (handle anchor)
 
-    private string? _pendingUpdateUrl;          // Ziel des „Update verfügbar"-Balloons
+    private string? _pendingUpdateUrl;          // target of the "update available" balloon
 
     public TrayContext(string[]? args = null)
     {
@@ -44,7 +44,7 @@ public sealed class TrayContext : ApplicationContext
 
         _iconOn = AppIcon.LoadStatus(running: true);
         _iconOff = AppIcon.LoadStatus(running: false);
-        _ = _marshal.Handle;  // erzwingt Handle-Erzeugung für Cross-Thread-BeginInvoke
+        _ = _marshal.Handle;  // forces handle creation for cross-thread BeginInvoke
 
         _toggleItem = new ToolStripMenuItem("Mirror starten", null, (_, _) => ToggleMirror());
         var menu = new ContextMenuStrip();
@@ -64,7 +64,7 @@ public sealed class TrayContext : ApplicationContext
         _tray.DoubleClick += (_, _) => OpenSettings();
         _tray.BalloonTipClicked += (_, _) => { if (_pendingUpdateUrl != null) OpenUrl(_pendingUpdateUrl); };
 
-        // Single-Instance: auf das „Einstellungen zeigen"-Signal einer zweiten Instanz lauschen.
+        // Single instance: listen for the "show settings" signal from a second instance.
         try
         {
             _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ShowSettingsEvent);
@@ -72,9 +72,9 @@ public sealed class TrayContext : ApplicationContext
                 _showEvent, (_, _) => { try { _marshal.BeginInvoke((Action)OpenSettings); } catch { } },
                 null, -1, executeOnlyOnce: false);
         }
-        catch { /* ohne Signalisierung läuft die App trotzdem (Single-Instance via Mutex greift weiter) */ }
+        catch { /* the app runs without signaling anyway (single-instance via mutex still applies) */ }
 
-        // Agent starten (falls aktiviert)
+        // Start the agent (if enabled)
         if (_app.AgentEnabled)
         {
             try
@@ -82,31 +82,31 @@ public sealed class TrayContext : ApplicationContext
                 _agent = new ControlAgent(_engine, _app.AgentBind, _app.AgentPort);
                 _agent.Start();
             }
-            catch (Exception ex) { _engine.Log("Agent-Start fehlgeschlagen: " + ex.Message); }
+            catch (Exception ex) { _engine.Log("Agent start failed: " + ex.Message); }
         }
 
         if (_app.AutostartMirror)
         {
             var err = _engine.Preflight();
             if (err == null) _engine.Start();
-            else _engine.Log("Autostart-Mirror übersprungen: " + err);
+            else _engine.Log("Autostart mirror skipped: " + err);
         }
 
-        // Menue-/Tooltip-Status aktuell halten
+        // Keep menu/tooltip status up to date
         _uiTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _uiTimer.Tick += (_, _) => RefreshUi();
         _uiTimer.Start();
         RefreshUi();
 
-        // Direkt die Einstellungen oeffnen (z.B. eigene „Einstellungen"-Verknuepfung / Test).
+        // Open the settings directly (e.g. a dedicated "Settings" shortcut / testing).
         if (args != null && Array.Exists(args, a => string.Equals(a, "--settings", StringComparison.OrdinalIgnoreCase)))
             OpenSettings();
 
-        StartUpdateCheck();  // beim Start still nach einer neueren Version schauen (best-effort)
+        StartUpdateCheck();  // quietly check for a newer version at startup (best-effort)
     }
 
-    /// <summary>Best-effort Update-Hinweis beim Start: GitHub-Release abfragen, bei neuer
-    /// Version einen anklickbaren Tray-Balloon zeigen. Fehler/offline = stillschweigend nichts.</summary>
+    /// <summary>Best-effort update notice at startup: query the GitHub release, and show a
+    /// clickable tray balloon if a newer version exists. Error/offline = silently nothing.</summary>
     private async void StartUpdateCheck()
     {
         var r = await UpdateCheck.CheckAsync().ConfigureAwait(false);
@@ -164,7 +164,7 @@ public sealed class TrayContext : ApplicationContext
             if (!File.Exists(_engine.LogPath)) File.WriteAllText(_engine.LogPath, "");
             Process.Start(new ProcessStartInfo("notepad.exe", $"\"{_engine.LogPath}\"") { UseShellExecute = true });
         }
-        catch (Exception ex) { _engine.Log("Log oeffnen fehlgeschlagen: " + ex.Message); }
+        catch (Exception ex) { _engine.Log("Failed to open log: " + ex.Message); }
     }
 
     private void RefreshUi()
@@ -173,7 +173,7 @@ public sealed class TrayContext : ApplicationContext
         _toggleItem.Text = running ? "Mirror stoppen" : "Mirror starten";
         string bind = _agent?.BoundPrefix ?? "Agent aus";
         _tray.Text = $"RitschyMirror — {(running ? "läuft" : "idle")}\n{bind}";
-        if (_lastRunning != running)  // Tray-Icon grün/rot nur bei Statuswechsel tauschen
+        if (_lastRunning != running)  // swap the green/red tray icon only on a status change
         {
             _lastRunning = running;
             _tray.Icon = running ? _iconOn : _iconOff;

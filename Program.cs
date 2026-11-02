@@ -8,15 +8,15 @@ internal static class Program
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 
-    // Named-Objekte für Single-Instance (Mutex) + „Einstellungen zeigen"-Signal an die laufende Instanz.
+    // Named objects for single instance (mutex) + "show settings" signal to the running instance.
     internal const string ShowSettingsEvent = "RitschyMirror.ShowSettings.Event";
     private const string MutexName = "RitschyMirror.SingleInstance.Mutex";
 
     [STAThread]
     private static void Main()
     {
-        // Single-Instance: läuft schon eine Kopie, bitten wir sie nur, die Einstellungen
-        // zu öffnen, und beenden uns. Verhindert doppelte Tray-Icons + Agent-Port-Konflikt.
+        // Single instance: if a copy is already running, we only ask it to open the settings
+        // and exit. Prevents duplicate tray icons + agent port conflicts.
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
         if (!createdNew)
         {
@@ -24,13 +24,13 @@ internal static class Program
             return;
         }
 
-        // Per-Monitor-V2 programmatisch (zuverlaessiger als Manifest bei .NET) —
-        // sonst werden Vollbild-Koordinaten/Groessen vom Windows-Scaling verfaelscht.
+        // Per-Monitor-V2 programmatically (more reliable than a manifest on .NET) —
+        // otherwise fullscreen coordinates/sizes get distorted by Windows scaling.
         try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { }
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new TrayContext(Environment.GetCommandLineArgs()));
-        GC.KeepAlive(mutex);  // Mutex bis App-Ende am Leben halten
+        GC.KeepAlive(mutex);  // keep the mutex alive until app exit
     }
 }

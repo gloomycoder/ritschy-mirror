@@ -3,32 +3,32 @@ using System.Text;
 
 namespace RitschyMirror;
 
-/// <summary>Ein aufnehmbares Top-Level-Fenster (für GUI-/Dock-Picker + Agent /windows).</summary>
+/// <summary>A capturable top-level window (for GUI/dock picker + agent /windows).</summary>
 public sealed class WindowInfo
 {
     public IntPtr Hwnd { get; set; }
     public string Title { get; set; } = "";
-    public string Exe { get; set; } = "";   // Prozess-Exe (z.B. „eldenring.exe") = stabile Identität
+    public string Exe { get; set; } = "";   // process exe (e.g. "eldenring.exe") = stable identity
     public int Pid { get; set; }
 
-    /// <summary>Anzeigename für Dropdowns: „Titel  (exe)".</summary>
+    /// <summary>Display name for dropdowns: "Title  (exe)".</summary>
     public string DisplayName =>
         string.IsNullOrWhiteSpace(Exe) ? Title : $"{Title}  ({Exe})";
 }
 
 /// <summary>
-/// Top-Level-Fenster auflisten (für die Fenster-Auswahl) und eine gespeicherte Auswahl
-/// identitäts-stabil gegen die AKTUELL offenen Fenster auflösen.
+/// List top-level windows (for the window picker) and resolve a saved selection
+/// identity-stably against the CURRENTLY open windows.
 ///
-/// Identität = Prozess-Exe (primär, überlebt Titeländerungen wie „Spiel — Level 2") + Fenstertitel
-/// (sekundär, zum Unterscheiden mehrerer Fenster derselben Exe). HWNDs sind NICHT stabil über
-/// Programmstarts → deshalb merken wir exe+title, nicht das Handle (gleiche Philosophie wie die
-/// umsteck-feste Monitor-Auswahl in <see cref="MirrorEngine.ResolveSelection"/>).
+/// Identity = process exe (primary, survives title changes like "Game — Level 2") + window title
+/// (secondary, to tell apart several windows of the same exe). HWNDs are NOT stable across
+/// program starts → so we remember exe+title, not the handle (same philosophy as the
+/// replug-proof monitor selection in <see cref="MirrorEngine.ResolveSelection"/>).
 /// </summary>
 public static class WindowEnum
 {
-    /// <summary>Sichtbare, „echte" Top-Level-Fenster (mit Titel, keine Tool-/Geister-Fenster,
-    /// nicht unser eigener Prozess). Sortiert nach Titel für eine ruhige Dropdown-Liste.</summary>
+    /// <summary>Visible, "real" top-level windows (with a title, no tool/ghost windows,
+    /// not our own process). Sorted by title for a calm dropdown list.</summary>
     public static List<WindowInfo> List()
     {
         var result = new List<WindowInfo>();
@@ -37,7 +37,7 @@ public static class WindowEnum
         EnumWindows((hWnd, _) =>
         {
             if (!IsCapturable(hWnd, ownPid, out string title, out int pid, out string exe))
-                return true; // weiter
+                return true; // continue
 
             result.Add(new WindowInfo { Hwnd = hWnd, Title = title, Pid = pid, Exe = exe });
             return true;
@@ -48,9 +48,9 @@ public static class WindowEnum
     }
 
     /// <summary>
-    /// Gespeicherte (exe, title) gegen die aktuell offenen Fenster auflösen.
-    /// Reihenfolge: gleiche Exe + exakter Titel → gleiche Exe + Titel-Prefix → einzige Exe-Übereinstimmung
-    /// → exakter Titel (ohne Exe-Info) → nichts. Liefert (hwnd, "") bei Treffer, sonst (Zero, Klartext-Fehler).
+    /// Resolve saved (exe, title) against the currently open windows.
+    /// Order: same exe + exact title → same exe + title prefix → sole exe match
+    /// → exact title (no exe info) → nothing. Returns (hwnd, "") on a match, otherwise (Zero, plain-text error).
     /// </summary>
     public static (IntPtr hwnd, string error) Resolve(string exe, string title)
     {
@@ -73,7 +73,7 @@ public static class WindowEnum
                 var prefix = sameExe.FirstOrDefault(w =>
                     hasTitle && w.Title.StartsWith(title, StringComparison.OrdinalIgnoreCase));
                 if (prefix != null) return (prefix.Hwnd, "");
-                return (sameExe[0].Hwnd, ""); // mehrere gleicher Exe, kein Titel-Match → erstes
+                return (sameExe[0].Hwnd, ""); // several with the same exe, no title match → first
             }
         }
         if (hasTitle)
@@ -86,24 +86,24 @@ public static class WindowEnum
         return (IntPtr.Zero, $"Fenster '{what}' nicht gefunden (läuft die Anwendung?)");
     }
 
-    // ── Filter: ist das ein „echtes", aufnehmbares App-Fenster? ───────────────────
+    // ── Filter: is this a "real", capturable app window? ───────────────────
     private static bool IsCapturable(IntPtr hWnd, uint ownPid, out string title, out int pid, out string exe)
     {
         title = ""; pid = 0; exe = "";
 
         if (!IsWindowVisible(hWnd)) return false;
 
-        // Nur Wurzel-Fenster (kein Kind/Popup-Eigentümer-Wirrwarr).
+        // Root windows only (no child/popup-owner mess).
         if (GetAncestor(hWnd, GA_ROOT) != hWnd) return false;
 
-        // Tool-Fenster (Tray-Helfer etc.) raus.
+        // Drop tool windows (tray helpers etc.).
         long exStyle = (long)GetWindowLongPtr(hWnd, GWL_EXSTYLE);
         if ((exStyle & WS_EX_TOOLWINDOW) != 0) return false;
 
-        // DWM-„cloaked" Fenster (UWP-Geister, andere Desktops) raus.
+        // Drop DWM-"cloaked" windows (UWP ghosts, other desktops).
         if (IsCloaked(hWnd)) return false;
 
-        // Titel muss vorhanden sein.
+        // A title must be present.
         int len = GetWindowTextLength(hWnd);
         if (len <= 0) return false;
         var sb = new StringBuilder(len + 1);
@@ -111,7 +111,7 @@ public static class WindowEnum
         title = sb.ToString().Trim();
         if (title.Length == 0) return false;
 
-        // Prozess ermitteln; eigenen Prozess (RitschyMirror) ausschließen.
+        // Determine the process; exclude our own process (RitschyMirror).
         GetWindowThreadProcessId(hWnd, out uint wpid);
         if (wpid == 0 || wpid == ownPid) return false;
         pid = (int)wpid;
@@ -127,12 +127,12 @@ public static class WindowEnum
             if (DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0)
                 return cloaked != 0;
         }
-        catch { /* DWM-Attribut nicht verfügbar → als nicht-cloaked behandeln */ }
+        catch { /* DWM attribute unavailable → treat as not cloaked */ }
         return false;
     }
 
-    /// <summary>Exe-Dateiname eines Prozesses (robust auch bei eingeschränktem Zugriff:
-    /// PROCESS_QUERY_LIMITED_INFORMATION + QueryFullProcessImageName, kein MainModule).</summary>
+    /// <summary>Exe file name of a process (robust even with restricted access:
+    /// PROCESS_QUERY_LIMITED_INFORMATION + QueryFullProcessImageName, no MainModule).</summary>
     private static string ProcessExeName(uint pid)
     {
         IntPtr h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
@@ -148,7 +148,7 @@ public static class WindowEnum
                 return slash >= 0 ? full[(slash + 1)..] : full;
             }
         }
-        catch { /* ignorieren → leerer Exe-Name */ }
+        catch { /* ignore → empty exe name */ }
         finally { CloseHandle(h); }
         return "";
     }
@@ -169,7 +169,7 @@ public static class WindowEnum
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
-    // GetWindowLongPtr ist auf x64 der richtige Einstieg (32-bit-Variante fällt weg, wir bauen x64-only).
+    // GetWindowLongPtr is the right entry point on x64 (the 32-bit variant is dropped, we build x64-only).
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hWnd, int dwAttribute, out int pvAttribute, int cbAttribute);

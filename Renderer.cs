@@ -8,8 +8,8 @@ using Vortice.Mathematics;
 namespace RitschyMirror;
 
 /// <summary>
-/// Swapchain + Shader-Pipeline. Zeichnet die gespiegelte (ggf. tonemappte) Quelle
-/// in den oberen Bereich des Ausgabeframes, Rest schwarz (21:9 → 16:9 oben).
+/// Swapchain + shader pipeline. Draws the mirrored (optionally tonemapped) source
+/// into the upper area of the output frame, the rest black (21:9 → 16:9 on top).
 /// </summary>
 public sealed class Renderer : IDisposable
 {
@@ -63,19 +63,19 @@ public sealed class Renderer : IDisposable
         factory.MakeWindowAssociation(hwnd, WindowAssociationFlags.IgnoreAltEnter);
         CreateRtv();
 
-        // Shader kompilieren
+        // Compile shaders
         Compiler.Compile(Shaders.Hlsl, "VSMain", "tonemap.hlsl", "vs_5_0", out var vsBlob, out var vsErr);
-        if (vsBlob is null) throw new Exception("VS-Compile: " + (vsErr?.AsString() ?? "unbekannt"));
+        if (vsBlob is null) throw new Exception("VS-Compile: " + (vsErr?.AsString() ?? "unknown"));
         Compiler.Compile(Shaders.Hlsl, "PSMain", "tonemap.hlsl", "ps_5_0", out var psBlob, out var psErr);
-        if (psBlob is null) throw new Exception("PS-Compile: " + (psErr?.AsString() ?? "unbekannt"));
+        if (psBlob is null) throw new Exception("PS-Compile: " + (psErr?.AsString() ?? "unknown"));
         Compiler.Compile(Shaders.Hlsl, "PSCursor", "tonemap.hlsl", "ps_5_0", out var pcBlob, out var pcErr);
-        if (pcBlob is null) throw new Exception("PSCursor-Compile: " + (pcErr?.AsString() ?? "unbekannt"));
+        if (pcBlob is null) throw new Exception("PSCursor-Compile: " + (pcErr?.AsString() ?? "unknown"));
         _vs = _device.CreateVertexShader(vsBlob.AsBytes());
         _ps = _device.CreatePixelShader(psBlob.AsBytes());
         _psCursor = _device.CreatePixelShader(pcBlob.AsBytes());
         vsBlob.Dispose(); psBlob.Dispose(); pcBlob.Dispose();
 
-        // Alpha-Blend fuer den Cursor (Straight-Alpha ueber das fertige Bild).
+        // Alpha blend for the cursor (straight alpha over the finished image).
         _blend = _device.CreateBlendState(new BlendDescription(Blend.SourceAlpha, Blend.InverseSourceAlpha));
 
         _sampler = _device.CreateSamplerState(new SamplerDescription
@@ -100,9 +100,9 @@ public sealed class Renderer : IDisposable
     }
 
     /// <summary>
-    /// Ein Frame zeichnen. Platzierung (Viewport) + Quell-Crop kommen aus
-    /// <see cref="MirrorConfig.LayoutMode"/> — siehe <see cref="ComputeLayout"/>.
-    /// Optional wird der Maus-Cursor (separat von DXGI geliefert) einkomponiert.
+    /// Draw one frame. Placement (viewport) + source crop come from
+    /// <see cref="MirrorConfig.LayoutMode"/> — see <see cref="ComputeLayout"/>.
+    /// Optionally the mouse cursor (delivered separately by DXGI) is composited in.
     /// </summary>
     public void Render(ICaptureSource cap, MirrorConfig cfg)
     {
@@ -121,10 +121,10 @@ public sealed class Renderer : IDisposable
             Gamma = cfg.Gamma,
             OperatorId = cfg.OperatorId,
             TonemapEnabled = cfg.TonemapEnabled ? 1 : 0,
-            // Beide Quellen (Desktop Duplication + WGC) liefern R16G16B16A16_FLOAT und damit
-            // IMMER lineares scRGB — unabhaengig vom HDR-Modus des Monitors.
+            // Both sources (Desktop Duplication + WGC) deliver R16G16B16A16_FLOAT and thus
+            // ALWAYS linear scRGB — regardless of the monitor's HDR mode.
             SrcIsLinear = 1,
-            OutputIsHdr = 0, // SDR-Ausgabe (Passthrough-HDR ist Phase 2)
+            OutputIsHdr = 0, // SDR output (passthrough HDR is phase 2)
             CropMinX = cropMinX, CropMinY = cropMinY,
             CropMaxX = cropMaxX, CropMaxY = cropMaxY,
             SrcScale = srcScale,
@@ -133,21 +133,21 @@ public sealed class Renderer : IDisposable
 
         _ctx.ClearRenderTargetView(_rtv, new Color4(0f, 0f, 0f, 1f));
 
-        // gemeinsame Pipeline-States
+        // shared pipeline states
         _ctx.OMSetRenderTargets(_rtv);
         _ctx.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         _ctx.VSSetShader(_vs);
         _ctx.PSSetSampler(0, _sampler);
         _ctx.PSSetConstantBuffer(0, _cbuffer);
 
-        // Haupt-Pass (opak)
+        // Main pass (opaque)
         _ctx.OMSetBlendState(null);
         _ctx.RSSetViewport(vp);
         _ctx.PSSetShader(_ps);
         _ctx.PSSetShaderResource(0, cap.Srv);
         _ctx.Draw(3, 0);
 
-        // Cursor-Pass (alpha) — Quell-Cursorposition in den Ausgabe-Viewport mappen.
+        // Cursor pass (alpha) — map the source cursor position into the output viewport.
         if (cfg.ShowCursor && cap.CursorVisible && cap.CursorSrv != null && cap.CursorW > 0)
         {
             float crW = cropMaxX - cropMinX, crH = cropMaxY - cropMinY;
@@ -155,7 +155,7 @@ public sealed class Renderer : IDisposable
             float ny = ((float)cap.CursorY / srcH - cropMinY) / crH;
             float nw = ((float)cap.CursorW / srcW) / crW;
             float nh = ((float)cap.CursorH / srcH) / crH;
-            if (nx < 1f && ny < 1f && nx + nw > 0f && ny + nh > 0f) // zumindest teils sichtbar
+            if (nx < 1f && ny < 1f && nx + nw > 0f && ny + nh > 0f) // at least partly visible
             {
                 var cvp = new Viewport(vp.X + nx * vp.Width, vp.Y + ny * vp.Height,
                                        nw * vp.Width, nh * vp.Height, 0f, 1f);
@@ -170,12 +170,12 @@ public sealed class Renderer : IDisposable
     }
 
     /// <summary>
-    /// Viewport (Platzierung im Ausgabeframe) + Quell-Crop (UV 0..1) aus dem layout_mode:
-    ///   fit         — ganze Quelle seitenverhaeltnis-erhaltend zentriert (nichts abgeschnitten)
-    ///   stretch     — Quelle fuellt den Frame (Seitenverhaeltnis ignoriert)
-    ///   top_strip   — Quelle auf Breite, oben ausgerichtet, Rest schwarz (21:9→16:9)
-    ///   crop_region — wie fit, aber nur das Quell-Rechteck crop_x/y/w/h
-    /// content_offset_y verschiebt vertikal.
+    /// Viewport (placement in the output frame) + source crop (UV 0..1) from layout_mode:
+    ///   fit         — whole source centered, aspect ratio preserved (nothing cropped)
+    ///   stretch     — source fills the frame (aspect ratio ignored)
+    ///   top_strip   — source scaled to width, top-aligned, rest black (21:9→16:9)
+    ///   crop_region — like fit, but only the source rectangle crop_x/y/w/h
+    /// content_offset_y shifts vertically.
     /// </summary>
     private (Viewport vp, float cMinX, float cMinY, float cMaxX, float cMaxY)
         ComputeLayout(int srcW, int srcH, MirrorConfig cfg)
@@ -183,7 +183,7 @@ public sealed class Renderer : IDisposable
         float W = Width, H = Height;
         string mode = (cfg.LayoutMode ?? "top_strip").Trim().ToLowerInvariant();
 
-        // Crop-UVs — nur crop_region nutzt sie; sonst volle Quelle (0..1).
+        // Crop UVs — only crop_region uses them; otherwise the full source (0..1).
         float cMinX = 0f, cMinY = 0f, cMaxX = 1f, cMaxY = 1f;
         float effSrcW = srcW, effSrcH = srcH;
         if (mode == "crop_region")
@@ -212,7 +212,7 @@ public sealed class Renderer : IDisposable
                 vp = new Viewport(0f, cfg.ContentOffsetY, W, stripH, 0f, 1f);
                 break;
             }
-            default: // "fit" und "crop_region": seitenverhaeltnis-erhaltend, zentriert
+            default: // "fit" and "crop_region": aspect ratio preserved, centered
             {
                 double srcAspect = (double)effSrcW / effSrcH;
                 double outAspect = (double)W / H;
@@ -229,15 +229,15 @@ public sealed class Renderer : IDisposable
     }
 
     /// <summary>
-    /// Aus dem Zustand der Quelle die zwei Groessen ableiten, mit denen der Shader rechnet —
-    /// statt „HDR" als Sonderfall im Shader zu verdrahten:
-    ///   Scale — Faktor vom Pufferwert aufs Arbeitslicht, wo 1.0 der Weisspunkt ist.
-    ///           HDR/scRGB: 1.0 im Puffer sind 80 nits → auf target_paperwhite normieren.
-    ///           SDR-Quelle: Weiss im Puffer IST schon der Weisspunkt → 1.0 = 1:1 durchreichen.
-    ///   Peak  — wie weit die Quelle ueber den Weisspunkt hinausreicht (Tonemap-Headroom).
-    ///           HDR: source_peak_nits / target_paperwhite (mind. 1.0).
-    ///           SDR: 1.0 = kein Headroom → das Tonemapping faellt von selbst weg, statt ein
-    ///           bereits fertiges SDR-Bild ein zweites Mal zu komprimieren.
+    /// From the source's state, derive the two quantities the shader works with —
+    /// instead of hard-wiring "HDR" as a special case in the shader:
+    ///   Scale — factor from buffer value to working light, where 1.0 is the white point.
+    ///           HDR/scRGB: 1.0 in the buffer is 80 nits → normalize to target_paperwhite.
+    ///           SDR source: white in the buffer IS already the white point → 1.0 = pass through 1:1.
+    ///   Peak  — how far the source extends beyond the white point (tonemap headroom).
+    ///           HDR: source_peak_nits / target_paperwhite (at least 1.0).
+    ///           SDR: 1.0 = no headroom → tonemapping drops out by itself, instead of
+    ///           compressing an already finished SDR image a second time.
     /// </summary>
     private static (float Scale, float Peak) ResolveSourceLight(bool srcIsHdr, MirrorConfig cfg)
     {
@@ -249,9 +249,9 @@ public sealed class Renderer : IDisposable
     public void Present(bool vsync) => _swapChain.Present(vsync ? 1u : 0u, PresentFlags.None);
 
     /// <summary>
-    /// Echtes DXGI-Exclusive-Fullscreen versuchen. Schlaegt fehl, wenn Ziel-Output an einem
-    /// ANDEREN Adapter haengt als das Render-Device (Cross-Adapter) — dann false → Caller
-    /// faellt auf borderless + Maus-Sperre zurueck.
+    /// Try true DXGI exclusive fullscreen. Fails if the target output is attached to a
+    /// DIFFERENT adapter than the render device (cross-adapter) — then false → caller
+    /// falls back to borderless + mouse lock.
     /// </summary>
     public bool TrySetExclusiveFullscreen(IDXGIOutput? output)
     {
@@ -259,7 +259,7 @@ public sealed class Renderer : IDisposable
         catch { return false; }
     }
 
-    /// <summary>Exclusive-Fullscreen verlassen — MUSS vor dem Swapchain-Dispose passieren (DXGI-Pflicht).</summary>
+    /// <summary>Leave exclusive fullscreen — MUST happen before swapchain dispose (DXGI requirement).</summary>
     public void ExitFullscreen()
     {
         try { _swapChain.SetFullscreenState(false, null); } catch { }

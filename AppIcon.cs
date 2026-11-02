@@ -5,14 +5,14 @@ using System.Windows.Forms;
 namespace RitschyMirror;
 
 /// <summary>
-/// Laedt das eingebettete App-Icon (assets\app.ico, LogicalName "app.ico") fuer Tray +
-/// Fenster. Faellt auf das System-Icon zurueck, falls die Ressource fehlt.
+/// Loads the embedded app icon (assets\app.ico, LogicalName "app.ico") for tray +
+/// windows. Falls back to the system icon if the resource is missing.
 /// </summary>
 internal static class AppIcon
 {
     public static Icon Load(bool small = true) => LoadNamed("app.ico", small);
 
-    /// <summary>Tray-Status-Icon: grün (Mirror läuft) oder rot (gestoppt).</summary>
+    /// <summary>Tray status icon: green (mirror running) or red (stopped).</summary>
     public static Icon LoadStatus(bool running) => LoadNamed(running ? "app_on.ico" : "app_off.ico", small: true);
 
     private static Icon LoadNamed(string resource, bool small)

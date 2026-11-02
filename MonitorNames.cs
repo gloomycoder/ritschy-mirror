@@ -2,20 +2,20 @@ using System.Runtime.InteropServices;
 
 namespace RitschyMirror;
 
-/// <summary>Stabile Monitor-Metadaten zu einem GDI-Display (\\.\DISPLAYx).</summary>
+/// <summary>Stable monitor metadata for a GDI display (\\.\DISPLAYx).</summary>
 internal readonly struct MonitorMeta
 {
-    public readonly string Friendly;    // EDID-Name, z.B. „AORUS FO32U2P" (leer = unbekannt)
-    public readonly string DevicePath;  // stabiler Geräte-Pfad \\?\DISPLAY#...#{guid} (leer = unbekannt)
+    public readonly string Friendly;    // EDID name, e.g. "AORUS FO32U2P" (empty = unknown)
+    public readonly string DevicePath;  // stable device path \\?\DISPLAY#...#{guid} (empty = unknown)
     public MonitorMeta(string friendly, string devicePath) { Friendly = friendly; DevicePath = devicePath; }
 }
 
 /// <summary>
-/// Liefert die „echten" Monitor-Namen (EDID/Hersteller, z.B. „LG ULTRAGEAR", „Elgato 4K X")
-/// statt der nackten GDI-Namen (\\.\DISPLAYx) — über die Windows CCD-API
-/// (QueryDisplayConfig + DisplayConfigGetDeviceInfo). Mapping: \\.\DISPLAYx → Friendly-Name +
-/// stabiler monitorDevicePath (für identitäts-stabile Monitor-Auswahl beim Umstecken).
-/// Bei Fehlern leere Map (Aufrufer fällt auf den GDI-Namen zurück).
+/// Provides the "real" monitor names (EDID/manufacturer, e.g. "LG ULTRAGEAR", "Elgato 4K X")
+/// instead of the bare GDI names (\\.\DISPLAYx) — via the Windows CCD API
+/// (QueryDisplayConfig + DisplayConfigGetDeviceInfo). Mapping: \\.\DISPLAYx → friendly name +
+/// stable monitorDevicePath (for identity-stable monitor selection when re-plugging).
+/// On errors an empty map (caller falls back to the GDI name).
 /// </summary>
 internal static class MonitorNames
 {
@@ -23,7 +23,7 @@ internal static class MonitorNames
     private const uint GET_SOURCE_NAME = 1;
     private const uint GET_TARGET_NAME = 2;
 
-    /// <summary>GDI-Name (\\.\DISPLAYx) → Friendly-Name (Kurzform, Abwärtskompatibilität).</summary>
+    /// <summary>GDI name (\\.\DISPLAYx) → friendly name (short form, backward compatibility).</summary>
     public static Dictionary<string, string> GetFriendlyNames()
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -32,7 +32,7 @@ internal static class MonitorNames
         return map;
     }
 
-    /// <summary>GDI-Name (\\.\DISPLAYx) → {Friendly, DevicePath}.</summary>
+    /// <summary>GDI name (\\.\DISPLAYx) → {Friendly, DevicePath}.</summary>
     public static Dictionary<string, MonitorMeta> GetMonitorMeta()
     {
         var map = new Dictionary<string, MonitorMeta>(StringComparer.OrdinalIgnoreCase);
@@ -67,7 +67,7 @@ internal static class MonitorNames
                 map[gdi] = new MonitorMeta(friendly, path);
             }
         }
-        catch { /* leer = Fallback auf GDI-Namen */ }
+        catch { /* empty = fall back to GDI names */ }
         return map;
     }
 
@@ -98,7 +98,7 @@ internal static class MonitorNames
     [StructLayout(LayoutKind.Sequential)]
     private struct DISPLAYCONFIG_PATH_INFO { public DISPLAYCONFIG_PATH_SOURCE_INFO sourceInfo; public DISPLAYCONFIG_PATH_TARGET_INFO targetInfo; public uint flags; }
 
-    // Mode-Info: wir brauchen den Inhalt nicht, nur die korrekte Größe (64 Bytes) fürs Array.
+    // Mode info: we don't need the content, only the correct size (64 bytes) for the array.
     [StructLayout(LayoutKind.Sequential, Size = 64)]
     private struct DISPLAYCONFIG_MODE_INFO { public uint infoType; public uint id; public LUID adapterId; }
 

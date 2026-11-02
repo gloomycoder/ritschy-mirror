@@ -2,11 +2,11 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <!-- Windows-SDK-TFM (statt net9.0-windows): schaltet die WinRT-Projektionen frei, u.a.
-         Windows.Graphics.Capture (WGC) für die Fenster-/Vollbild-App-Aufnahme. WinForms bleibt.
-         API-Surface 22621 (damit IsBorderRequired bekannt ist), aber Runtime-Floor 19041 → die App
-         läuft weiter auf Windows 10 (2004+, das WGC-Minimum); neuere APIs werden zur Laufzeit
-         versionsgeguarded (OperatingSystem.IsWindowsVersionAtLeast). -->
+    <!-- Windows SDK TFM (instead of net9.0-windows): unlocks the WinRT projections, including
+         Windows.Graphics.Capture (WGC) for window/fullscreen-app capture. WinForms stays.
+         API surface 22621 (so IsBorderRequired is known), but runtime floor 19041 → the app
+         keeps running on Windows 10 (2004+, the WGC minimum); newer APIs are
+         version-guarded at runtime (OperatingSystem.IsWindowsVersionAtLeast). -->
     <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <UseWindowsForms>true</UseWindowsForms>
@@ -39,8 +39,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Icons fuer Tray + Fenster (LogicalName fest, damit AppIcon.Load sie findet).
-         app.ico = Basis (Fenster), app_on/off = Tray-Status gruen/rot. -->
+    <!-- Icons for tray + window (fixed LogicalName so AppIcon.Load finds them).
+         app.ico = base (window), app_on/off = tray status green/red. -->
     <EmbeddedResource Include="assets\app.ico">
       <LogicalName>app.ico</LogicalName>
     </EmbeddedResource>
@@ -50,7 +50,7 @@
     <EmbeddedResource Include="assets\app_off.ico">
       <LogicalName>app_off.ico</LogicalName>
     </EmbeddedResource>
-    <!-- OBS-/Browser-Steuer-Dock, vom HTTP-Agent unter / und /dock ausgeliefert. -->
+    <!-- OBS/browser control dock, served by the HTTP agent at / and /dock. -->
     <EmbeddedResource Include="web\dock.html">
       <LogicalName>dock.html</LogicalName>
     </EmbeddedResource>

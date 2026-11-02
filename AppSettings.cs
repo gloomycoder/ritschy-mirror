@@ -4,17 +4,17 @@ using System.Text.Json.Serialization;
 namespace RitschyMirror;
 
 /// <summary>
-/// App-Ebene (app_settings.json) — bewusst GETRENNT von mirror_config.json (Render-Parameter),
-/// damit der Cockpit-WinRM-Fallback (der nur Render-Keys liest/schreibt) unberuehrt bleibt.
-/// Hier: HTTP-Steuer-Agent (Bind/Port) + Autostart.
+/// App level (app_settings.json) — deliberately SEPARATE from mirror_config.json (render parameters),
+/// so the Cockpit WinRM fallback (which only reads/writes render keys) stays untouched.
+/// Here: HTTP control agent (bind/port) + autostart.
 /// </summary>
 public sealed class AppSettings
 {
-    // Agent-Bind: "localhost" (nur lokal) oder "+"/"0.0.0.0" (vom Netzwerk erreichbar → Cockpit).
+    // Agent bind: "localhost" (local only) or "+"/"0.0.0.0" (reachable from the network → Cockpit).
     [JsonPropertyName("agent_bind")]    public string AgentBind { get; set; } = "+";
     [JsonPropertyName("agent_port")]    public int AgentPort { get; set; } = 8788;
     [JsonPropertyName("agent_enabled")] public bool AgentEnabled { get; set; } = true;
-    // Spiegelung beim App-Start automatisch beginnen (sonst nur Tray-idle).
+    // Start mirroring automatically on app start (otherwise only tray idle).
     [JsonPropertyName("autostart_mirror")] public bool AutostartMirror { get; set; } = false;
 
     private static readonly JsonSerializerOptions ReadOpts = new()
