@@ -97,7 +97,8 @@ sends the result to the display your capture card is plugged into.
 - 🔊 **Audio mirroring** *(optional)* — mixes the sources you tick into the HDMI/DP audio of the
   target monitor, so the capture card gets the sound too: any output device as it sounds (e.g.
   speakers **and** the headset Discord plays to) and input devices such as a mic, each with its own
-  gain plus a common gain per group (dB). It reacts to device changes live, never loops the target
+  gain plus a common gain per group (dB). Output devices follow their Windows volume and mute (can
+  be switched off for recording). It reacts to device changes live, never loops the target
   back into itself, and shows what it mixes and what it skipped (and why).
 - 📊 **Capture / output FPS readout** *(optional, for verification)* — shows the capture and output
   frame rates in a corner of your choice (top/bottom, left/right). Note that it is drawn into the

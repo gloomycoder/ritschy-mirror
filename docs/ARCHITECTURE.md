@@ -137,6 +137,12 @@ format. The rates are also in `GET /status` (`capture_fps`, `output_fps`).
   (errors logged, never thrown: it runs inside the worker's catch/finally). Any other exception in
   a worker iteration is handled like a failed start — pipeline dropped, retry on the back-off
   (at least 1 s, so a failing wait can't spin) — and the worker stays alive until `Dispose()`.
+- **Volume follow** (`audio_follow_volume`, default on) — loopback delivers an output device's mix
+  before its endpoint volume and mute (measured: the mirror kept the same level at 14 % and muted).
+  An output-device channel therefore multiplies its gain by the device's level in dB relative to
+  its maximum (never a boost) and by 0 when muted or at 0 %, updated from
+  `AudioEndpointVolume.OnVolumeNotification`. Input devices are left alone — Windows applies a
+  mic's input level and mute before capture clients get the signal (not measured here: no mic).
 - **Output** — `audio_output_id` if set, otherwise the target monitor's endpoint by EDID name.
 - **Retry** — a (re)start that throws (device not ready, exclusive use by another app) is retried
   by the worker on a 1 s → 30 s back-off; a success resets it. Gain = group dB (`audio_render_gain_db` / `audio_capture_gain_db`) + source dB,
@@ -263,7 +269,8 @@ remote controller all write the same file; the render loop reads it live.
 `target_paperwhite`, `exposure`, `saturation`, `contrast`, `gamma`, `content_offset_y`,
 `vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`,
 `target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`, `audio_sources`,
-`audio_render_gain_db`, `audio_capture_gain_db`, `audio_output_id`, `audio_output_name`, `scale_filter`.
+`audio_render_gain_db`, `audio_capture_gain_db`, `audio_output_id`, `audio_output_name`,
+`audio_follow_volume`, `scale_filter`.
 
 `tonemap_enabled`, `operator`, `source_peak_nits` and `target_paperwhite` are only in effect for
 an **HDR** source — see [Colour pipeline](#colour-pipeline--hdr-vs-sdr-source).

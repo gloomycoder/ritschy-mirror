@@ -654,6 +654,7 @@ public sealed class MirrorEngine
         to.AudioMirror = from.AudioMirror; to.AudioSources = from.AudioSources;
         to.AudioRenderGainDb = from.AudioRenderGainDb; to.AudioCaptureGainDb = from.AudioCaptureGainDb;
         to.AudioOutputId = from.AudioOutputId; to.AudioOutputName = from.AudioOutputName;
+        to.AudioFollowVolume = from.AudioFollowVolume;
     }
 
     private void LogFramePacing(MirrorConfig cfg)

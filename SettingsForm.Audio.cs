@@ -23,6 +23,8 @@ public sealed partial class SettingsForm
         // Where the mix goes: automatic (target monitor's HDMI/DP audio) or a fixed device.
         var autoIds = AudioDevices.TargetEndpointIds(_cfg.TargetLabel);
         BuildOutputRow(autoIds);
+        CheckRow(L.T("settings.audio_follow_volume"), _cfg.AudioFollowVolume, v => _cfg.AudioFollowVolume = v);
+        Note(L.T("settings.audio_follow_volume.note"));
 
         // The output endpoint itself is never offered as a source: capturing it would loop the mix.
         var targetIds = string.IsNullOrWhiteSpace(_cfg.AudioOutputId)

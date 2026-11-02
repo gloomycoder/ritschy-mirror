@@ -82,6 +82,8 @@
   "audio.out.label": "출력 장치 (캡처카드로)",
   "audio.out.auto": "자동 — 출력 모니터 ({0})",
   "audio.out.note": "자동은 출력 모니터의 HDMI/DP 오디오를 씁니다. 이름이 달라 찾지 못하거나 같은 모니터가 여러 대면 직접 고르세요. 소스 목록에는 \"↻ 장치 새로고침\" 후 반영됩니다.",
+  "settings.audio_follow_volume": "출력 장치의 볼륨과 음소거 따라가기",
+  "settings.audio_follow_volume.note": "켜면: Windows에서 출력 장치 볼륨을 줄이거나 음소거하면 미러도 들리는 대로 똑같이 바뀝니다. 끄면: 미러는 항상 원래 크기의 신호를 받습니다 (예: 녹화용). 마이크는 항상 Windows 입력 레벨이 적용된 상태로 들어옵니다.",
   "audio.src.is_default": "(기본) {0}",
   "audio.status.retrying": "사용 불가 — {0} ({1}초 후 다시 시도)",
   "audio.status.output_not_found": "비활성화 — 출력 장치 \"{0}\"이(가) 연결되어 있지 않습니다",

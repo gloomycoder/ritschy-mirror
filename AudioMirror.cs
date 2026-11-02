@@ -47,6 +47,7 @@ public sealed class AudioMirror : IDisposable
     private string _targetLabel = "";
     private List<AudioSourceConfig> _sources = new();
     private float _renderGainDb, _captureGainDb;
+    private bool _followVolume = true;
     private string _outputId = "", _outputName = "";
     private string _compositionKey = "";
 
@@ -100,10 +101,15 @@ public sealed class AudioMirror : IDisposable
             _sources = copy;
             _renderGainDb = cfg.AudioRenderGainDb;
             _captureGainDb = cfg.AudioCaptureGainDb;
+            _followVolume = cfg.AudioFollowVolume;
             _outputId = outputId;
             _outputName = cfg.AudioOutputName ?? "";
             _compositionKey = composition;
-            foreach (var ch in _channels) ch.SetGain(GainFor(ch.ConfigKey, ch.IsRender));
+            foreach (var ch in _channels)
+            {
+                ch.SetGain(GainFor(ch.ConfigKey, ch.IsRender));
+                ch.SetFollowVolume(_followVolume);
+            }
         }
         if (!rebuild) return;
         if (enabled && _worker is null)
@@ -375,9 +381,10 @@ public sealed class AudioMirror : IDisposable
             foreach (var r in sources)
             {
                 float gain;
-                lock (_gate) gain = GainFor(r.Source.Key, r.Source.IsRender);
+                bool follow;
+                lock (_gate) { gain = GainFor(r.Source.Key, r.Source.IsRender); follow = _followVolume; }
                 handed++;   // the channel owns the device from here on, also if its constructor throws
-                var ch = new AudioSourceChannel(r.Device, r.Source.IsRender, r.Source.Key, gain, mixFormat);
+                var ch = new AudioSourceChannel(r.Device, r.Source.IsRender, r.Source.Key, gain, follow, mixFormat);
                 ch.Stopped += OnPipelineStopped;
                 channels.Add(ch);
                 mixer.AddMixerInput(ch.Output);
@@ -404,7 +411,8 @@ public sealed class AudioMirror : IDisposable
         _out = player;
         _outDevice = dst;
         foreach (var ch in channels)
-            _log($"Audio mirror source: \"{ch.Name}\" ({(ch.IsRender ? "loopback" : "input")}, {ch.CaptureFormat}).");
+            _log($"Audio mirror source: \"{ch.Name}\" ({(ch.IsRender ? "loopback" : "input")}, {ch.CaptureFormat}" +
+                 (ch.FollowText.Length > 0 ? ", " + ch.FollowText : "") + ").");
         _log($"Audio mirror running: {channels.Count} source(s) → \"{dst.FriendlyName}\".");
     }
 
@@ -453,7 +461,8 @@ public sealed class AudioMirror : IDisposable
             string drift = d.Active
                 ? $"queue {d.AvgMs:0.0} ms ({d.MinMs:0.0}..{d.MaxMs:0.0}), ratio {d.Ratio:0.000000} ({d.MinRatio:0.000000}..{d.MaxRatio:0.000000})"
                 : "silent";
-            _log($"Soak audio {intervalSec} s \"{ch.Name}\": {drift}, {d.Starts} restart(s) after silence, {trims} emergency trim(s).");
+            string follow = ch.FollowText.Length > 0 ? ", " + ch.FollowText : "";
+            _log($"Soak audio {intervalSec} s \"{ch.Name}\": {drift}, {d.Starts} restart(s) after silence, {trims} emergency trim(s){follow}.");
         }
     }
 

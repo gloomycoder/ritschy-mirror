@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The mirror follows the Windows volume and mute of output devices** (new setting, on by
+  default). Loopback captures a device's sound before its volume, so turning the headset down or
+  muting it used to leave the HDMI audio unchanged. Now the mirror changes the same way, in dB as
+  you hear it. Switch it off to always send the full signal, e.g. for recording. Microphones need
+  nothing: Windows applies their input level and mute before any app receives them.
+
 - **Audio recovers by itself after an unexpected error.** The audio worker's last-resort handler
   no longer ends the worker (which left audio off until a config change or a mirror restart); it
   releases the pipeline and retries on the normal 1 s → 30 s back-off.

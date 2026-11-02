@@ -13,6 +13,12 @@ namespace RitschyMirror;
 /// Each device runs on its own clock, so the queue slowly fills or drains relative to the output;
 /// <see cref="DriftCompensator"/> holds it at ~40 ms by resampling within ±0.5 %. Only if the
 /// queue still runs away (playback stalled) is it cut back on the capture thread.
+///
+/// Loopback captures an output device's mix BEFORE its Windows volume and mute, so turning the
+/// speakers down would not change the mirror. With "follow volume" on, an output-device channel
+/// applies that device's attenuation (dB relative to its maximum) and mute on top of the user gain,
+/// updated live from the endpoint's volume notifications. Input devices need nothing: Windows
+/// applies a microphone's input level and mute before any app receives the signal.
 /// </summary>
 internal sealed class AudioSourceChannel : IDisposable
 {
@@ -26,6 +32,10 @@ internal sealed class AudioSourceChannel : IDisposable
     private readonly DriftCompensator _drift;
     private byte[] _trimScratch = Array.Empty<byte>();
     private int _trims;   // emergency cuts since the last TakeStats()
+    private readonly AudioEndpointVolume? _endpointVolume;   // output devices only
+    private float _userGain;                 // group + device gain (linear)
+    private volatile bool _follow;
+    private volatile float _followFactor = 1f;   // device volume/mute as a linear factor
 
     /// <summary>Device-level identity ("render:{endpoint id}") — used to drop duplicates.</summary>
     public string DeviceKey { get; }
@@ -39,7 +49,7 @@ internal sealed class AudioSourceChannel : IDisposable
     public event EventHandler<StoppedEventArgs>? Stopped;
 
     /// <param name="device">Taken over by the channel (disposed with it).</param>
-    public AudioSourceChannel(MMDevice device, bool isRender, string configKey, float gain, WaveFormat mixFormat)
+    public AudioSourceChannel(MMDevice device, bool isRender, string configKey, float gain, bool followVolume, WaveFormat mixFormat)
     {
         _device = device;
         IsRender = isRender;
@@ -69,9 +79,18 @@ internal sealed class AudioSourceChannel : IDisposable
             if (s.WaveFormat.SampleRate != mixFormat.SampleRate)
                 s = new WdlResamplingSampleProvider(s, mixFormat.SampleRate);
             _gain = new VolumeSampleProvider(s) { Volume = gain };
+            _userGain = gain;
+            if (isRender)
+            {
+                _endpointVolume = device.AudioEndpointVolume;   // owned (and disposed) by the device
+                _endpointVolume.OnVolumeNotification += OnDeviceVolume;
+                _followFactor = ReadFollowFactor();
+            }
+            SetFollowVolume(followVolume);
         }
         catch
         {
+            if (_endpointVolume != null) _endpointVolume.OnVolumeNotification -= OnDeviceVolume;
             _recorder.Dispose();
             throw;
         }
@@ -80,7 +99,55 @@ internal sealed class AudioSourceChannel : IDisposable
     }
 
     /// <summary>Linear gain; read by the playback thread, a plain float write is enough.</summary>
-    public void SetGain(float linear) => _gain.Volume = linear;
+    public void SetGain(float linear)
+    {
+        _userGain = linear;
+        ApplyGain();
+    }
+
+    /// <summary>Apply (or ignore) the captured output device's Windows volume and mute.</summary>
+    public void SetFollowVolume(bool follow)
+    {
+        _follow = follow && _endpointVolume != null;
+        ApplyGain();
+    }
+
+    /// <summary>"follows volume -12.3 dB" / "follows volume: muted" for logs; "" when not following.</summary>
+    public string FollowText
+    {
+        get
+        {
+            if (!_follow) return "";
+            float f = _followFactor;
+            return f <= 0 ? "follows volume: muted" : $"follows volume {20 * Math.Log10(f):0.0} dB";
+        }
+    }
+
+    private void ApplyGain() => _gain.Volume = _userGain * (_follow ? _followFactor : 1f);
+
+    /// <summary>Device volume changed (any thread) → follow it immediately.</summary>
+    private void OnDeviceVolume(AudioVolumeNotificationData data)
+    {
+        try
+        {
+            _followFactor = data.Muted || data.MasterVolume <= 0 ? 0f : ReadFollowFactor();
+            ApplyGain();
+        }
+        catch (Exception) { /* device going away — the pipeline is about to be rebuilt */ }
+    }
+
+    /// <summary>
+    /// Attenuation the device applies, as a linear factor: its level in dB relative to its maximum
+    /// (100 % = 1.0, so a device with a +dB range never boosts the mirror), 0 when muted or at 0 %.
+    /// dB rather than the slider scalar, so the mirror changes by what you actually hear.
+    /// </summary>
+    private float ReadFollowFactor()
+    {
+        var v = _endpointVolume!;
+        if (v.Mute || v.MasterVolumeLevelScalar <= 0) return 0f;
+        double db = v.MasterVolumeLevel - v.VolumeRange.MaxDecibels;
+        return (float)Math.Pow(10, Math.Min(0, db) / 20);
+    }
 
     public void Start() => _recorder.StartRecording();
 
@@ -116,6 +183,7 @@ internal sealed class AudioSourceChannel : IDisposable
     {
         _recorder.DataAvailable -= OnCaptured;
         _recorder.RecordingStopped -= OnStopped;
+        if (_endpointVolume != null) _endpointVolume.OnVolumeNotification -= OnDeviceVolume;
         // Release every part even if one throws (a vanished device fails in odd places);
         // the first error goes to the caller, which logs it.
         Exception? first = null;

@@ -82,6 +82,8 @@
   "audio.out.label": "Ausgabegerät (zur Capture-Karte)",
   "audio.out.auto": "Automatisch — Ausgabe-Monitor ({0})",
   "audio.out.note": "Automatisch nutzt das HDMI/DP-Audio des Ausgabe-Monitors. Gerät wählen, wenn es nicht gefunden wird (anderer Name, identische Monitore). Für die Quellenliste nach „↻ Geräte aktualisieren\".",
+  "settings.audio_follow_volume": "Lautstärke und Stummschaltung der Ausgabegeräte folgen",
+  "settings.audio_follow_volume.note": "An: Wird ein Ausgabegerät in Windows leiser gestellt oder stummgeschaltet, ändert sich der Spiegel genauso, wie du es hörst. Aus: Der Spiegel erhält immer das volle Signal (z. B. für Aufnahmen). Mikrofone kommen immer mit ihrem Windows-Eingangspegel an.",
   "audio.src.is_default": "(Standard) {0}",
   "audio.status.retrying": "nicht verfügbar — {0} (neuer Versuch in {1} s)",
   "audio.status.output_not_found": "deaktiviert — Ausgabegerät „{0}\" ist nicht verbunden",
