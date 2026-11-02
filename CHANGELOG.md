@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.5 — one capture mode + capture target
 
 - **Simpler capture setup:** one **capture mode** list — Monitor (DXGI), Monitor (WGC), Window (WGC)
   — and one **capture target** list that shows monitors or windows to match the mode (settings and

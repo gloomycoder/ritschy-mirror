@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.5 ✓
+
+- **Simpler capture setup** — one capture mode (Monitor DXGI / Monitor WGC / Window WGC) and one
+  capture target list; "output monitor" wording throughout.
+
 ## Done in v1.4.4 ✓
 
 - **Audio robustness** — retry with back-off after failed restarts, continuous drift compensation,
