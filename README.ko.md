@@ -43,7 +43,7 @@
 > 돌아가며, 그냥 알아서 잘 동작합니다. — 원작자
 
 <p align="center">
-  <img src="docs/screenshot-settings.png" width="430" alt="RitschyMirror settings window">
+  <img src="docs/screenshot-settings.ko.png" width="430" alt="RitschyMirror 설정 창">
 </p>
 
 ---
