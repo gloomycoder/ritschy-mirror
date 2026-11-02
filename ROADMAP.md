@@ -1,5 +1,11 @@
 # Roadmap
 
+## Done in v1.4.4 ✓
+
+- **Audio robustness** — retry with back-off after failed restarts, continuous drift compensation,
+  channel-mask downmix, name-selected default stays visible, manual output device.
+- **Monitor capture API choice** — DXGI Desktop Duplication or Windows.Graphics.Capture.
+
 ## Done in v1.4.3 ✓
 
 - **Selectable scale filter** — Bilinear, Area, Bicubic (Mitchell / Catmull-Rom), Lanczos 2/3 as a

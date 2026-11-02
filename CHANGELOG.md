@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.4 — robust audio mirroring, DXGI/WGC monitor capture
 
 - **Monitor capture: choose DXGI or WGC** (`monitor_api`). DXGI Desktop Duplication stays the
   default (lowest overhead); Windows.Graphics.Capture is now available for whole monitors too —
