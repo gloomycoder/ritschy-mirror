@@ -5,14 +5,15 @@
 <h1 align="center">RitschyMirror</h1>
 
 <p align="center">
-  <b>Mirror any monitor to your capture card — with proper HDR&nbsp;→&nbsp;SDR tonemapping.</b>
+  <b>Mirror any monitor or window to another monitor — your capture card, a second screen, a
+  portable display — with proper HDR&nbsp;→&nbsp;SDR tonemapping.</b>
 </p>
 
 <p align="center">English · <a href="README.ko.md">한국어</a></p>
 
 <p align="center">
-  A lightweight Windows tool for <b>dual-PC / capture-card streaming setups</b>.<br>
-  Pick a source monitor, fit it cleanly onto your capture display, lock the mouse out — done.
+  A lightweight Windows tool for <b>dual-PC streaming</b> and <b>second-screen mirroring</b>.<br>
+  Pick what to capture, fit it cleanly onto the output monitor, lock the mouse out — done.
 </p>
 
 <p align="center">
@@ -37,8 +38,12 @@ The common trick is OBS's *Fullscreen Projector* — but it has real problems:
 
 **RitschyMirror** is a small, dedicated app that does exactly this one job — and does it
 better. It grabs a monitor, **tonemaps HDR → SDR** on the GPU, **fits / letterboxes / crops**
-it to your capture resolution, optionally **locks the mouse out of the target display**, and
-sends the result to the display your capture card is plugged into.
+it to the output resolution, optionally **locks the mouse out of the output monitor**, and
+sends the result there.
+
+The **output monitor** can be any display Windows sees: in a dual-PC rig it is the capture card's
+HDMI input (Windows lists it like a monitor), but it works just as well for a second screen facing
+an audience, a portable display or a TV.
 
 > Originally built to replace the OBS projector in my own dual-stream rig. It runs quietly in
 > the system tray and just works.
@@ -51,13 +56,13 @@ sends the result to the display your capture card is plugged into.
 
 ## Features
 
-- 🎯 **Pick source & target monitor** from dropdowns — real monitor names (e.g. *AORUS FO32U2P*),
-  HDR-aware, multi-GPU aware (source and target may even hang off **different graphics cards**).
+- 🎯 **Pick capture target & output monitor** from dropdowns — real monitor names (e.g. *AORUS FO32U2P*),
+  HDR-aware, multi-GPU aware (capture and output may even hang off **different graphics cards**).
 - 🧭 **Choose the monitor capture API** — DXGI Desktop Duplication (default, lowest overhead) or
   Windows.Graphics.Capture (works across GPUs, cursor drawn by Windows).
 - 🪟 **Or mirror a single window / fullscreen app** instead of a whole monitor — pick one app
   (e.g. just your game). Only that window is shown, so **alt-tabbing never flashes your desktop**
-  into the capture card. Built on Windows.Graphics.Capture (the modern OS API, *not* injection →
+  onto the output monitor (or into your stream). Built on Windows.Graphics.Capture (the modern OS API, *not* injection →
   no anti-cheat risk, robust even when capture and game live on different GPUs).
 - 🌈 **HDR → SDR tonemapping** on the GPU (`bt2390`, `reinhard`, `hable`, `aces`) with **live**
   exposure / saturation / contrast / gamma / paper-white controls. Applied **only when the source
@@ -73,9 +78,9 @@ sends the result to the display your capture card is plugged into.
   instead of shimmering. At 1:1 nothing is filtered.
 - 🖥️ **Output modes**:
   - `windowed` — a normal test window
-  - `borderless` — borderless fullscreen on the target display
+  - `borderless` — borderless fullscreen on the output monitor
   - `fullscreen_block` — borderless fullscreen **+ mouse-lock** (the cursor is kept out of the
-    target display; works on any setup, including cross-GPU). The mouse-lock runs on its own
+    output monitor; works on any setup, including cross-GPU). The mouse-lock runs on its own
     thread, so the cursor stays smooth at full polling rate (v1.2.1).
   - `exclusive` — true DXGI exclusive fullscreen (best when source & target share one GPU; falls
     back automatically to `fullscreen_block` otherwise)
@@ -83,7 +88,7 @@ sends the result to the display your capture card is plugged into.
   babysit. Optional **auto-start at login**.
 - 🎚️ **Live config** — most settings (image, layout, crop) apply **instantly** while mirroring.
 - 🛡️ **Keeps your PC awake while mirroring** — holds off display power-off and sleep so the
-  capture-card display can't drop out mid-stream (like a video player). On by default,
+  output monitor (or capture card) can't drop out mid-stream (like a video player). On by default,
   toggleable in Settings and the dock.
 - 🔌 **OBS / browser control dock** — the app serves a small control page you can add to OBS as a
   **Custom Browser Dock** (or open in any browser): status light, start/stop, monitor pick, and
@@ -95,14 +100,14 @@ sends the result to the display your capture card is plugged into.
   hasn't changed, and every output slot uses the **newest** source frame (no queued, stale frames →
   no extra latency). With VSync on, the display refresh paces the output and the limit is ignored.
 - 🔊 **Audio mirroring** *(optional)* — mixes the sources you tick into the HDMI/DP audio of the
-  target monitor, so the capture card gets the sound too: any output device as it sounds (e.g.
-  speakers **and** the headset Discord plays to) and input devices such as a mic, each with its own
+  output monitor, so whatever is connected there (capture card, TV, monitor speakers) gets the
+  sound too: any output device as it sounds (e.g. speakers **and** the headset Discord plays to) and input devices such as a mic, each with its own
   gain plus a common gain per group (dB). Output devices follow their Windows volume and mute (can
   be switched off for recording). It reacts to device changes live, never loops the target
   back into itself, and shows what it mixes and what it skipped (and why).
 - 📊 **Capture / output FPS readout** *(optional, for verification)* — shows the capture and output
   frame rates in a corner of your choice (top/bottom, left/right). Note that it is drawn into the
-  mirrored picture, so the capture card sees it as well.
+  mirrored picture, so it shows on the output monitor (and in a capture) as well.
 - 🗂️ **Tidy settings window** — one collapsible section per feature, each with its on/off switch
   and a live summary in the header (running state, frame rates, audio status …), plus a
   **live log pane** at the bottom that you can resize or hide.
@@ -135,10 +140,10 @@ the folder.
 
 1. Click the tray icon → **Settings**.
 2. **Capture mode** = Monitor (DXGI), Monitor (WGC) or Window (WGC); **Capture target** = the
-   monitor or window to mirror (the list follows the mode). **Output monitor** = the display your
-   capture card is plugged into.
+   monitor or window to mirror (the list follows the mode). **Output monitor** = the display to
+   mirror onto (for streaming: the one your capture card is plugged into).
 3. Pick a **Layout mode** (`fit` is the safe default) and **Output mode**
-   (`fullscreen_block` if you want the mouse locked out of the capture display).
+   (`fullscreen_block` if you want the mouse locked out of the output monitor).
 4. Hit **Start** in the tray menu (or in the settings window).
 5. Tune the image live with the **Tonemap / sliders** if your source is HDR.
 
@@ -159,7 +164,7 @@ and tweak it from anywhere — most usefully right inside OBS on your streaming 
 > (the installer/app uses port `8788`; allow it through the firewall). On a single PC, `localhost`
 > works out of the box.
 
-The dock gives you a status light, one-click Start/Stop, source/target monitor pickers, layout &
+The dock gives you a status light, one-click Start/Stop, capture target / output monitor pickers, layout &
 output mode, and **live image + crop sliders** — no extra software, it's served by the app itself.
 
 ---

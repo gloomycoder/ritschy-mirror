@@ -10,6 +10,8 @@
 - Changing the mix output device or the output monitor updates the audio source list right away
   (the device that becomes the output drops out as a source) — no more "Refresh devices" needed.
 - Gain boxes show their unit (dB).
+- README (en / ko) describes the mirror as going to any **output monitor** — the capture card of a
+  dual-PC rig is one example next to a second screen, portable display or TV.
 - Docs: new README section **Performance & game impact** — PresentMon measurement showing that DXGI
   and WGC capture keep a borderless game in Independent Flip (no added latency), how the mirror's
   cost scales, and how to check your own setup.
