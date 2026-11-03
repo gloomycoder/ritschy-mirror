@@ -18,6 +18,8 @@
   "settings.capture_mode.note": "DXGI: 부하가 가장 적고, 캡처할 모니터가 연결된 GPU에서 동작합니다. WGC: GPU가 달라도 동작하고 커서를 Windows가 그립니다 (Windows 10은 노란 테두리). 윈도우 창: 그 창만 미러링하므로 Alt+Tab 해도 바탕화면이 보이지 않습니다. 모드를 바꾸면 캡처 대상이 초기화됩니다.",
   "dock.refresh_sources": "목록 새로고침",
   "settings.window_missing": "⚠ 저장된 창 \"{0}\"이(가) 지금 열려 있지 않습니다 (선택은 그대로 저장됨).",
+  "settings.window_title_similar": "창 캡처: 제목이 조금 바뀐 창도 같은 창으로 인식",
+  "settings.window_title_similar.note": "끄면: 저장된 제목과 정확히 같은 창만 다시 미러링합니다. 켜면: 뒤에 글자가 붙거나 숫자만 바뀐 제목(예: 게임 빌드 번호)도 인정합니다. 게임에는 편하지만, 제목이 비슷한 다른 창(예: \"보고서 2025\" 대신 \"보고서 2026\")으로 넘어갈 수 있습니다.",
   "settings.target_monitor": "출력 모니터",
   "settings.source_missing": "⚠ 저장된 캡처 모니터 \"{0}\"이(가) 지금 연결되어 있지 않습니다.",
   "settings.target_missing": "⚠ 저장된 출력 모니터 \"{0}\"이(가) 지금 연결되어 있지 않습니다.",

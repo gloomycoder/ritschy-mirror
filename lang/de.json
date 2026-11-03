@@ -18,6 +18,8 @@
   "settings.capture_mode.note": "DXGI: geringste Last, an die GPU des Aufnahme-Monitors gebunden. WGC: GPU-übergreifend, Mauszeiger von Windows (gelber Rahmen unter Windows 10). Fenster: nur dieses Fenster wird gespiegelt — Alt+Tab zeigt nie den Desktop. Ein Moduswechsel setzt das Aufnahmeziel zurück.",
   "dock.refresh_sources": "Liste aktualisieren",
   "settings.window_missing": "⚠ Gespeichertes Fenster \"{0}\" aktuell nicht offen (Auswahl bleibt gespeichert).",
+  "settings.window_title_similar": "Fensteraufnahme: leicht geänderten Titel akzeptieren",
+  "settings.window_title_similar.note": "Aus: nur ein Fenster mit genau dem gespeicherten Titel wird wieder gespiegelt. An: auch ein Titel mit angehängtem Text oder anderen Zahlen (z. B. Build-Nummer eines Spiels) — praktisch für Spiele, kann aber zu einem ähnlich benannten anderen Fenster wechseln (z. B. „Bericht 2026\" statt „Bericht 2025\").",
   "settings.target_monitor": "Ausgabe-Monitor",
   "settings.source_missing": "⚠ Gespeicherter Aufnahme-Monitor \"{0}\" aktuell nicht verbunden.",
   "settings.target_missing": "⚠ Gespeicherter Ausgabe-Monitor \"{0}\" aktuell nicht verbunden.",

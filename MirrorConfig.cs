@@ -80,6 +80,9 @@ public sealed class MirrorConfig
     // tell apart multiple windows of the same exe). Analogous to the replug-proof monitor identity.
     [JsonPropertyName("window_exe")]       public string WindowExe { get; set; } = "";
     [JsonPropertyName("window_title")]     public string WindowTitle { get; set; } = "";
+    // Resume on a window whose title changed slightly (extended / numbers only, e.g. a game's build
+    // number). Off = exact title only — a similar-looking other window is never taken.
+    [JsonPropertyName("window_title_similar")] public bool WindowTitleSimilar { get; set; } = false;
 
     // ── Structure (restart required) ───────────────────────────────────────
     [JsonPropertyName("output_bit_depth")] public int OutputBitDepth { get; set; } = 10;
@@ -155,7 +158,7 @@ public sealed class MirrorConfig
         "layout_mode", "crop_x", "crop_y", "crop_w", "crop_h", "show_cursor", "keep_awake",
         "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror", "audio_sources", "scale_filter",
         "audio_render_gain_db", "audio_capture_gain_db", "audio_output_id", "audio_output_name",
-        "audio_follow_volume",
+        "audio_follow_volume", "window_title_similar",
     };
     public static readonly HashSet<string> StructKeys = new(StringComparer.OrdinalIgnoreCase)
     {

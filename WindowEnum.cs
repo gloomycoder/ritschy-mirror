@@ -54,26 +54,29 @@ public static class WindowEnum
     /// otherwise (Zero, user-facing error). A saved window that isn't open — including when no
     /// capturable window exists at all — is "window not found", which the engine waits for.
     /// </summary>
-    public static (IntPtr hwnd, LocalizedText? error) Resolve(string exe, string title)
+    public static (IntPtr hwnd, LocalizedText? error) Resolve(string exe, string title, bool similarTitle)
     {
         bool hasExe = !string.IsNullOrWhiteSpace(exe);
         bool hasTitle = !string.IsNullOrWhiteSpace(title);
         if (!hasExe && !hasTitle)
             return (IntPtr.Zero, new LocalizedText("error.no_window_selected"));
 
-        var match = Match(List(), exe, title);
+        var match = Match(List(), exe, title, similarTitle);
         if (match != null) return (match.Hwnd, null);
         return (IntPtr.Zero, new LocalizedText("error.window_not_found", hasTitle ? title : exe));
     }
 
     /// <summary>
-    /// The saved window among <paramref name="wins"/>, or null. Only the same window counts: same exe
-    /// (when saved) and a title that is equal, extends the saved one ("Game" → "Game — Level 2"), or
-    /// differs only in its numbers ("Game - 533972" → "Game - 612345": builds, session ids). Never
-    /// another window of that exe — browser window A closed while B stays open means waiting for A,
-    /// not mirroring B. An exe saved without a title (old configs) takes that exe's first window.
+    /// The saved window among <paramref name="wins"/>, or null: same exe (when saved) and the same
+    /// title (case-insensitive). Never just another window of that exe — browser window A closed
+    /// while B stays open means waiting for A, not mirroring B. Only with
+    /// <paramref name="similarTitle"/> (opt-in, <c>window_title_similar</c>) a title that extends the
+    /// saved one ("Game" → "Game — Level 2") or differs only in its numbers ("Game - 533972" →
+    /// "Game - 612345": builds, session ids) counts too — convenient for games, but it can also take
+    /// "Report 2026" for "Report 2025". An exe saved without a title (old configs) takes that exe's
+    /// first window.
     /// </summary>
-    public static WindowInfo? Match(IReadOnlyList<WindowInfo> wins, string exe, string title)
+    public static WindowInfo? Match(IReadOnlyList<WindowInfo> wins, string exe, string title, bool similarTitle)
     {
         const StringComparison oic = StringComparison.OrdinalIgnoreCase;
         bool hasExe = !string.IsNullOrWhiteSpace(exe);
@@ -81,9 +84,10 @@ public static class WindowEnum
         var pool = hasExe ? wins.Where(w => string.Equals(w.Exe, exe, oic)).ToList() : wins.ToList();
         if (!hasTitle) return hasExe ? pool.FirstOrDefault() : null;
 
+        var exact = pool.FirstOrDefault(w => string.Equals(w.Title, title, oic));
+        if (exact != null || !similarTitle) return exact;
         string stable = StableTitle(title);
-        return pool.FirstOrDefault(w => string.Equals(w.Title, title, oic))
-            ?? pool.FirstOrDefault(w => w.Title.StartsWith(title, oic))
+        return pool.FirstOrDefault(w => w.Title.StartsWith(title, oic))
             ?? pool.FirstOrDefault(w => StableTitle(w.Title) == stable);
     }
 

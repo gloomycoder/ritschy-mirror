@@ -16,6 +16,7 @@ public sealed partial class SettingsForm
 
     private ComboBox _sourceCombo = null!;
     private Label _sourceNote = null!;
+    private CheckBox _similarTitle = null!;
 
     private bool IsWindowMode => _cfg.ResolveCaptureMode() == "window";
 
@@ -43,6 +44,14 @@ public sealed partial class SettingsForm
                                   Size = new Size(NoteWidth, lineHeight), ForeColor = Color.DimGray };
         _body.Controls.Add(_sourceNote);
         _y += lineHeight + 6;
+
+        // Window capture only: also resume on a slightly renamed window (games' build numbers).
+        _similarTitle = CheckRow(L.T("settings.window_title_similar"), _cfg.WindowTitleSimilar, v =>
+        {
+            _cfg.WindowTitleSimilar = v;
+            PopulateSources();   // the shown selection follows the same rule
+        });
+        Note(L.T("settings.window_title_similar.note"));
         PopulateSources();
     }
 
@@ -81,6 +90,7 @@ public sealed partial class SettingsForm
         }
         _sourceCombo.SelectedIndex = sel;
         _sourceNote.Text = missing;
+        if (_similarTitle != null) _similarTitle.Enabled = IsWindowMode;
         _loading = wasLoading;
     }
 

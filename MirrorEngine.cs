@@ -387,17 +387,32 @@ public sealed class MirrorEngine
                 for (uint o = 0; ; o++)
                 {
                     if (ad.EnumOutputs(o, out IDXGIOutput? outp).Failure || outp is null) break;
-                    var o6 = outp.QueryInterface<IDXGIOutput6>();
-                    var d = o6.Description1;
-                    bool hdr = d.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020
-                            || d.ColorSpace == ColorSpaceType.RgbFullG10NoneP709;
-                    var dc = d.DesktopCoordinates;
-                    meta.TryGetValue(d.DeviceName, out var mm);
-                    string friendly = mm.Friendly ?? "";
-                    string key = MakeKey(mm.DevicePath ?? "", friendly, d.DeviceName);
-                    displays.Add((ad, o6, dc.Left, dc.Top, dc.Right, dc.Bottom, hdr, $"{d.DeviceName} [{adName}]", friendly, key));
-                    outp.Dispose();
-                    SetupLog($"  Display {displays.Count - 1}: {d.DeviceName} ({(friendly.Length > 0 ? friendly : "?")})  {dc.Right - dc.Left}x{dc.Bottom - dc.Top}  HDR={hdr}  [{adName}]");
+                    using (outp)
+                    {
+                        // o6 belongs to the displays list (→ CleanupEnum) only once added; until then
+                        // a failing query releases it here.
+                        var o6 = outp.QueryInterface<IDXGIOutput6>();
+                        OutputDescription1 d;
+                        string friendly, key;
+                        bool hdr;
+                        try
+                        {
+                            d = o6.Description1;
+                            hdr = d.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020
+                               || d.ColorSpace == ColorSpaceType.RgbFullG10NoneP709;
+                            meta.TryGetValue(d.DeviceName, out var mm);
+                            friendly = mm.Friendly ?? "";
+                            key = MakeKey(mm.DevicePath ?? "", friendly, d.DeviceName);
+                        }
+                        catch
+                        {
+                            o6.Dispose();
+                            throw;
+                        }
+                        var dc = d.DesktopCoordinates;
+                        displays.Add((ad, o6, dc.Left, dc.Top, dc.Right, dc.Bottom, hdr, $"{d.DeviceName} [{adName}]", friendly, key));
+                        SetupLog($"  Display {displays.Count - 1}: {d.DeviceName} ({(friendly.Length > 0 ? friendly : "?")})  {dc.Right - dc.Left}x{dc.Bottom - dc.Top}  HDR={hdr}  [{adName}]");
+                    }
                 }
             }
         }
@@ -449,7 +464,7 @@ public sealed class MirrorEngine
             {
                 // Window source (WGC): saved identity → current HWND. If the window is missing
                 // (app not open) → clean abort with a plain-text message instead of blindly mirroring something.
-                var (hwnd, winErr) = WindowEnum.Resolve(cfg.WindowExe, cfg.WindowTitle);
+                var (hwnd, winErr) = WindowEnum.Resolve(cfg.WindowExe, cfg.WindowTitle, cfg.WindowTitleSimilar);
                 if (winErr != null || hwnd == IntPtr.Zero)
                 {
                     return (SelectionFailed(winErr ?? new LocalizedText("error.no_window_selected")), 0);
@@ -759,6 +774,7 @@ public sealed class MirrorEngine
         to.AudioRenderGainDb = from.AudioRenderGainDb; to.AudioCaptureGainDb = from.AudioCaptureGainDb;
         to.AudioOutputId = from.AudioOutputId; to.AudioOutputName = from.AudioOutputName;
         to.AudioFollowVolume = from.AudioFollowVolume;
+        to.WindowTitleSimilar = from.WindowTitleSimilar;
     }
 
     private void LogFramePacing(MirrorConfig cfg)
@@ -829,11 +845,13 @@ public sealed class MirrorEngine
             for (uint a = 0; ; a++)
             {
                 if (factory.EnumAdapters1(a, out IDXGIAdapter1? ad).Failure || ad is null) break;
+                using var adapter = ad;   // released also when a call below throws
                 string adName = ad.Description1.Description;
                 for (uint o = 0; ; o++)
                 {
                     if (ad.EnumOutputs(o, out IDXGIOutput? outp).Failure || outp is null) break;
-                    var o6 = outp.QueryInterface<IDXGIOutput6>();
+                    using var output = outp;
+                    using var o6 = outp.QueryInterface<IDXGIOutput6>();
                     var d = o6.Description1;
                     bool hdr = d.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020
                             || d.ColorSpace == ColorSpaceType.RgbFullG10NoneP709;
@@ -851,10 +869,7 @@ public sealed class MirrorEngine
                         Adapter = adName,
                         Left = dc.Left, Top = dc.Top, Right = dc.Right, Bottom = dc.Bottom,
                     });
-                    o6.Dispose();
-                    outp.Dispose();
                 }
-                ad.Dispose();
             }
         }
         catch { /* empty list = no displays could be determined */ }

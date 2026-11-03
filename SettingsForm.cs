@@ -631,15 +631,12 @@ public sealed partial class SettingsForm : Form
 
     /// <summary>Combo index for the saved window identity: same exe + exact title →
     /// first same exe → exact title. -1 = not found (window not open).</summary>
+    /// <summary>The saved window in the list — by the same rule the engine resumes with.</summary>
     private int FindWindowIndex()
     {
         if (!HasWindowIdentity()) return -1;
-        int exact = _windows.FindIndex(w =>
-            string.Equals(w.Exe, _cfg.WindowExe, OIC) && string.Equals(w.Title, _cfg.WindowTitle, OIC));
-        if (exact >= 0) return exact;
-        int byExe = _windows.FindIndex(w => string.Equals(w.Exe, _cfg.WindowExe, OIC));
-        if (byExe >= 0) return byExe;
-        return _windows.FindIndex(w => string.Equals(w.Title, _cfg.WindowTitle, OIC));
+        var match = WindowEnum.Match(_windows, _cfg.WindowExe, _cfg.WindowTitle, _cfg.WindowTitleSimilar);
+        return match is null ? -1 : _windows.IndexOf(match);
     }
 
     // ── Login autostart (HKCU\...\Run) ────────────────────────────────────
