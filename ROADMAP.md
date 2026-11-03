@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.14 ✓
+
+- **Same-window recovery** — a missing window is only resumed when that window is back (exe + title),
+  never another window of the same app; adapter cleanup on every enumeration path.
+
 ## Done in v1.4.13 ✓
 
 - **Wording & docs** — UI text reviewed in all three languages, README framed around the output

@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.4.13-2ea0c9">
+  <img src="https://img.shields.io/badge/version-1.4.14-2ea0c9">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20(x64)-2ea0c9">
   <img src="https://img.shields.io/badge/license-MIT-3aa757">
   <img src="https://img.shields.io/badge/.NET-9-512bd4">
@@ -120,7 +120,7 @@ an audience, a portable display or a TV.
 ## Download & Install
 
 1. Go to the [**Releases**](https://github.com/gloomycoder/ritschy-mirror/releases) page and
-   download **`RitschyMirror-1.4.13-portable.zip`**.
+   download **`RitschyMirror-1.4.14-portable.zip`**.
 2. Extract it anywhere you can write to (e.g. `D:\Tools\RitschyMirror`). It contains a single,
    self-contained `RitschyMirror.exe` (no .NET install needed) and `config\` with the defaults.
 3. Run `RitschyMirror.exe` — the app starts in your tray; no admin / UAC prompt. `log\` is created

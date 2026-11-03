@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.14 — window capture resumes only on the same window
 
 - **Window capture only resumes on the same window.** A missing window is matched by exe + title
   (equal, extended, or differing only in numbers like a build / session id) — no longer by "any

@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.4.13-2ea0c9">
+  <img src="https://img.shields.io/badge/version-1.4.14-2ea0c9">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20(x64)-2ea0c9">
   <img src="https://img.shields.io/badge/license-MIT-3aa757">
   <img src="https://img.shields.io/badge/.NET-9-512bd4">
@@ -119,7 +119,7 @@ TV로 내보낼 때도 똑같이 쓸 수 있습니다.
 ## 다운로드 및 설치
 
 1. [**Releases**](https://github.com/gloomycoder/ritschy-mirror/releases) 페이지에서
-   **`RitschyMirror-1.4.13-portable.zip`**을 내려받습니다.
+   **`RitschyMirror-1.4.14-portable.zip`**을 내려받습니다.
 2. 쓰기 권한이 있는 아무 폴더에나 압축을 풉니다(예: `D:\Tools\RitschyMirror`). 안에는 .NET 설치가
    필요 없는 단일 실행 파일 `RitschyMirror.exe`와 기본 설정이 든 `config\` 폴더가 있습니다.
 3. `RitschyMirror.exe`를 실행하면 트레이에서 시작됩니다. 관리자 권한이나 UAC 확인창은 필요 없고,
