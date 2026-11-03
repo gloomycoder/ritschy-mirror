@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.13 ✓
+
+- **Wording & docs** — UI text reviewed in all three languages, README framed around the output
+  monitor, PresentMon measurement of the effect on a running game.
+
 ## Done in v1.4.12 ✓
 
 - **Always-on resilience** — DXGI waits out UAC / lock screen, missing monitors and windows are

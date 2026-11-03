@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.13 — clearer UI wording, output-monitor docs, game-impact measurement
 
 - **UI wording pass (en / ko / de).** "Capture card" is no longer assumed in the UI (the mirror goes
   to any output monitor); clearer names for the restart button, tone-map curve, paper white, source
