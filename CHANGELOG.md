@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.16 — picture adjustments on/off, typed slider values with reset
 
 - **Picture adjustments can be switched off** — the section (exposure / saturation / contrast /
   gamma) gets an on/off switch in its header, like tone mapping; off passes neutral values and

@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.16 ✓
+
+- **Adjustments switch & typed sliders** — picture adjustments on/off (settings + dock); every slider
+  takes a typed value, with a reset button where the default isn't 0.
+
 ## Done in v1.4.15 ✓
 
 - **Exact window match** — window capture resumes on the exact title; similar titles (game build
