@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.15 ✓
+
+- **Exact window match** — window capture resumes on the exact title; similar titles (game build
+  numbers) are an opt-in setting; full release of enumeration objects on errors.
+
 ## Done in v1.4.14 ✓
 
 - **Same-window recovery** — a missing window is only resumed when that window is back (exe + title),

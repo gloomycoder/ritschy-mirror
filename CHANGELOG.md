@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.15 — exact window title by default, similar titles opt-in
 
 - **Window capture resumes on the exact title by default.** v1.4.14 also took an extended title or
   one with other numbers, which can mean a different window ("Report 2025" → "Report 2026",
