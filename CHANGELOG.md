@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Window capture resumes on the exact title by default.** v1.4.14 also took an extended title or
+  one with other numbers, which can mean a different window ("Report 2025" → "Report 2026",
+  "Document" → "Document Private"). That is now an opt-in setting, *also accept a slightly changed
+  title* (`window_title_similar`), meant for games that put a build or session number in the title.
+  The settings window shows the saved window by the same rule.
+- Display enumeration releases every output object even when a call fails mid-way (engine and
+  settings lists).
+
 ## v1.4.14 — window capture resumes only on the same window
 
 - **Window capture only resumes on the same window.** A missing window is matched by exe + title

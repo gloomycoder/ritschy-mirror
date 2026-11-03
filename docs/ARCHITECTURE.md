@@ -230,8 +230,10 @@ displays" (`MirrorEngine.IsWaitable`) are not failures: the session returns
 `SessionResult.Waiting`, the supervisor looks again every `WaitForSourceMs` (1 s, a few ms per
 check) until it is back — matched by its saved identity only, never another screen — and the UI
 shows "waiting". Manual start and autostart start anyway in that case. A window only counts as
-back when `WindowEnum.Match` finds the same one (exe + equal / extended / numbers-only-changed
-title), never merely another window of that exe. Real configuration errors
+back when `WindowEnum.Match` finds the same one: same exe and the exact title (case-insensitive),
+never merely another window of that exe. `window_title_similar` (opt-in, settings checkbox) also
+accepts an extended title or one whose numbers changed — for games with a build/session number in
+the title, at the risk of a similarly named other window. Real configuration errors
 (nothing selected, capture = output monitor, output on the primary monitor) still stop at once
 (`SessionResult.Fatal`) with their message.
 3. **Window-procedure lifetime (`Win32Window`)** — the window class is registered **once per
@@ -299,7 +301,7 @@ remote controller all write the same file; the render loop reads it live.
 `vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`,
 `target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`, `audio_sources`,
 `audio_render_gain_db`, `audio_capture_gain_db`, `audio_output_id`, `audio_output_name`,
-`audio_follow_volume`, `scale_filter`.
+`audio_follow_volume`, `window_title_similar`, `scale_filter`.
 
 `tonemap_enabled`, `operator`, `source_peak_nits` and `target_paperwhite` are only in effect for
 an **HDR** source — see [Colour pipeline](#colour-pipeline--hdr-vs-sdr-source).
