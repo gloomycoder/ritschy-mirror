@@ -139,15 +139,16 @@ public sealed class Renderer : IDisposable
         var (vp, cropMinX, cropMinY, cropMaxX, cropMaxY) = ComputeLayout(srcW, srcH, cfg);
 
         var (srcScale, srcPeak) = ResolveSourceLight(cap.InputIsHdr, cfg);
+        bool adjust = cfg.AdjustEnabled;   // off → neutral picture adjustments
 
         var p = new ShaderParams
         {
-            Exposure = cfg.Exposure,
+            Exposure = adjust ? cfg.Exposure : 0f,
             SrcPeak = srcPeak,
             TargetPaperwhite = cfg.TargetPaperwhite,
-            Saturation = cfg.Saturation,
-            Contrast = cfg.Contrast,
-            Gamma = cfg.Gamma,
+            Saturation = adjust ? cfg.Saturation : 1f,
+            Contrast = adjust ? cfg.Contrast : 1f,
+            Gamma = adjust ? cfg.Gamma : 1f,
             OperatorId = cfg.OperatorId,
             TonemapEnabled = cfg.TonemapEnabled ? 1 : 0,
             // Both sources (Desktop Duplication + WGC) deliver R16G16B16A16_FLOAT and thus

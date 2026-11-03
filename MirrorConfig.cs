@@ -21,6 +21,8 @@ public sealed class MirrorConfig
     [JsonPropertyName("operator")]         public string Operator { get; set; } = "bt2390";
     [JsonPropertyName("source_peak_nits")] public float SourcePeakNits { get; set; } = 1000f;
     [JsonPropertyName("target_paperwhite")] public float TargetPaperwhite { get; set; } = 200f;
+    // Picture adjustments below on/off; off = neutral (values stay saved).
+    [JsonPropertyName("adjust_enabled")]   public bool AdjustEnabled { get; set; } = true;
     [JsonPropertyName("exposure")]         public float Exposure { get; set; } = 0f;
     [JsonPropertyName("saturation")]       public float Saturation { get; set; } = 1f;
     [JsonPropertyName("contrast")]         public float Contrast { get; set; } = 1f;
@@ -158,7 +160,7 @@ public sealed class MirrorConfig
         "layout_mode", "crop_x", "crop_y", "crop_w", "crop_h", "show_cursor", "keep_awake",
         "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror", "audio_sources", "scale_filter",
         "audio_render_gain_db", "audio_capture_gain_db", "audio_output_id", "audio_output_name",
-        "audio_follow_volume", "window_title_similar",
+        "audio_follow_volume", "window_title_similar", "adjust_enabled",
     };
     public static readonly HashSet<string> StructKeys = new(StringComparer.OrdinalIgnoreCase)
     {

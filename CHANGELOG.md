@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Picture adjustments can be switched off** — the section (exposure / saturation / contrast /
+  gamma) gets an on/off switch in its header, like tone mapping; off passes neutral values and
+  keeps yours saved (`adjust_enabled`, also in the OBS dock). The scale filter stays automatic.
+- **Every slider takes a typed value** — a number box next to each slider (tone mapping and picture
+  adjustments), and a *Reset* button where the default isn't 0 (paper white, source peak,
+  saturation, contrast, gamma; the tooltip shows the default). Exposure (default 0): type 0.
+
 ## v1.4.15 — exact window title by default, similar titles opt-in
 
 - **Window capture resumes on the exact title by default.** v1.4.14 also took an extended title or

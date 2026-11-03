@@ -109,6 +109,7 @@
         <option value="bt2390">bt2390</option><option value="reinhard">reinhard</option>
         <option value="hable">hable</option><option value="aces">aces</option>
       </select></div>
+    <label class="chk"><input type="checkbox" id="adjust_enabled"><span data-i18n="settings.adjust_enabled">Picture adjustments</span></label>
     <div class="row"><label data-i18n="settings.saturation">Saturation</label><input type="range" id="saturation" min="0" max="2" step="0.01"><span class="val" id="saturation_v"></span></div>
     <div class="row"><label data-i18n="settings.contrast">Contrast</label><input type="range" id="contrast" min="0" max="2" step="0.01"><span class="val" id="contrast_v"></span></div>
     <div class="row"><label data-i18n="settings.gamma">Gamma</label><input type="range" id="gamma" min="0.3" max="3" step="0.01"><span class="val" id="gamma_v"></span></div>
@@ -208,7 +209,7 @@ SLIDERS.forEach(id => {
 });
 
 // ── Live checkboxes + selects ──
-const CHECKS = ["tonemap_enabled","show_cursor","vsync","keep_awake","fps_overlay","audio_mirror"];
+const CHECKS = ["tonemap_enabled","adjust_enabled","show_cursor","vsync","keep_awake","fps_overlay","audio_mirror"];
 CHECKS.forEach(id => $(id).addEventListener("change", e => patch({ [id]: e.target.checked })));
 $("vsync").addEventListener("change", e => { $("target_fps").disabled = e.target.checked; });
 $("operator").addEventListener("change", e => patch({ operator: e.target.value }));

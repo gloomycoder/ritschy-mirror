@@ -67,7 +67,8 @@ an audience, a portable display or a TV.
 - 🌈 **HDR → SDR tonemapping** on the GPU (`bt2390`, `reinhard`, `hable`, `aces`) with **live**
   exposure / saturation / contrast / gamma / paper-white controls. Applied **only when the source
   really is HDR** — an SDR source is passed through 1:1, and turning HDR on or off is picked up
-  while the mirror is running.
+  while the mirror is running. The picture adjustments have their own on/off switch; every slider
+  also takes a typed value, with a reset button where the default isn't 0.
 - 🖼️ **Layout modes** — how the source fills the output:
   - `fit` — whole source, aspect-preserved, nothing cut off (true 1:1 mirror)
   - `stretch` — fill the frame (ignore aspect)

@@ -49,6 +49,8 @@ computed in `Renderer.ResolveSourceLight`:
 Tone mapping runs only when `SrcPeak > 1`, so an SDR source is passed through 1:1 instead of
 being squashed a second time. Consequence: **`source_peak_nits` and `target_paperwhite` only
 affect an HDR source**; with an SDR source only exposure/saturation/contrast/gamma do anything.
+`adjust_enabled = false` passes neutral values for those four (exposure 0, saturation / contrast /
+gamma 1 — identical to the defaults) without touching the saved ones.
 
 `InputIsHdr` is re-read at runtime via `ICaptureSource.RefreshSourceState()` — periodically from
 the render loop and after every `Recover()`, since a display mode change (HDR on/off is one) is
@@ -297,7 +299,7 @@ Read live (mtime polling — `FileSystemWatcher` misses atomic writes). The file
 remote controller all write the same file; the render loop reads it live.
 
 **Live keys** (apply immediately): `tonemap_enabled`, `operator`, `source_peak_nits`,
-`target_paperwhite`, `exposure`, `saturation`, `contrast`, `gamma`, `content_offset_y`,
+`target_paperwhite`, `adjust_enabled`, `exposure`, `saturation`, `contrast`, `gamma`, `content_offset_y`,
 `vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`,
 `target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`, `audio_sources`,
 `audio_render_gain_db`, `audio_capture_gain_db`, `audio_output_id`, `audio_output_name`,

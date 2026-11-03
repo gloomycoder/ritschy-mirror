@@ -48,6 +48,7 @@ public sealed partial class SettingsForm : Form
     private List<WindowInfo> _windows = new();
     private Label _audioStatus = null!;
     private readonly System.Windows.Forms.Timer _statusTimer;
+    private ToolTip? _tips;
 
     private const StringComparison OIC = StringComparison.OrdinalIgnoreCase;
 
@@ -127,7 +128,7 @@ public sealed partial class SettingsForm : Form
         _statusTimer = new System.Windows.Forms.Timer { Interval = StatusRefreshMs };
         _statusTimer.Tick += (_, _) => RefreshSummaries();
         _statusTimer.Start();
-        FormClosed += (_, _) => _statusTimer.Dispose();
+        FormClosed += (_, _) => { _statusTimer.Dispose(); _tips?.Dispose(); };
     }
 
     /// <summary>Start with a preflight check — if the source/target monitor is missing, show a clear
@@ -298,20 +299,64 @@ public sealed partial class SettingsForm : Form
         return c;
     }
 
-    private void FloatRow(string label, float min, float max, float val, string fmt, Action<float> set)
+    /// <summary>
+    /// Slider + number box (type an exact value) kept in sync. <paramref name="reset"/>: the default,
+    /// shown as a reset button — only for defaults other than 0 (0 is simply typed).
+    /// </summary>
+    private void FloatRow(string label, float min, float max, float val, string fmt, Action<float> set, float? reset = null)
     {
         Lbl(label);
+        int dec = fmt.Contains('.') ? fmt.Length - fmt.IndexOf('.') - 1 : 0;
+        decimal step = dec > 0 ? (decimal)Math.Pow(10, -dec) : (max - min > 1000 ? 10 : 1);
+        decimal Box(float v) => Math.Clamp(Math.Round((decimal)v, dec), (decimal)min, (decimal)max);
         // Fixed height: an auto-sized TrackBar mis-renders (thumb only) after DPI scaling.
         var tb = new TrackBar { Minimum = 0, Maximum = 1000, TickStyle = TickStyle.None, AutoSize = false,
                                 Location = new Point(CX, _y - 2), Width = 260, Height = 30 };
-        var vl = new Label { Location = new Point(VX, _y + 4), AutoSize = true, Text = val.ToString(fmt) };
-        int ToTick(float v) => (int)Math.Round((v - min) / (max - min) * 1000);
+        var num = new NumericUpDown { Location = new Point(VX, _y), Width = FloatNumberWidth, Minimum = (decimal)min,
+                                      Maximum = (decimal)max, DecimalPlaces = dec, Increment = step,
+                                      TextAlign = HorizontalAlignment.Right, Value = Box(val) };
+        int ToTick(float v) => Math.Clamp((int)Math.Round((v - min) / (max - min) * 1000), 0, 1000);
         float ToVal(int t) => min + (max - min) * t / 1000f;
-        tb.Value = Math.Clamp(ToTick(val), 0, 1000);
-        tb.Scroll += (_, _) => { float v = ToVal(tb.Value); vl.Text = v.ToString(fmt); if (!_loading) { set(v); SaveCfg(); } };
-        _body.Controls.Add(tb); _body.Controls.Add(vl);
+        tb.Value = ToTick(val);
+
+        bool syncing = false;   // one control updating the other must not echo back
+        void Apply(float v)
+        {
+            if (_loading) return;
+            set(v);
+            SaveCfg();
+        }
+        tb.Scroll += (_, _) =>
+        {
+            if (syncing) return;
+            syncing = true;
+            num.Value = Box(ToVal(tb.Value));
+            syncing = false;
+            Apply((float)num.Value);
+        };
+        num.ValueChanged += (_, _) =>
+        {
+            if (syncing) return;
+            syncing = true;
+            tb.Value = ToTick((float)num.Value);
+            syncing = false;
+            Apply((float)num.Value);
+        };
+        _body.Controls.Add(tb);
+        _body.Controls.Add(num);
+        if (reset is float r)
+        {
+            var b = new Button { Text = L.T("settings.reset"), Location = new Point(VX + FloatNumberWidth + 6, _y - 1),
+                                 Size = new Size(ResetWidth, 26) };
+            _tips ??= new ToolTip();
+            _tips.SetToolTip(b, L.T("settings.reset.tip", r.ToString(fmt)));
+            b.Click += (_, _) => num.Value = Box(r);
+            _body.Controls.Add(b);
+        }
         _y += 38;
     }
+
+    private const int FloatNumberWidth = 72, ResetWidth = 58;
 
     private NumericUpDown NumRow(string label, decimal min, decimal max, decimal val, decimal step, int dec, Action<decimal> set, bool app = false)
     {
@@ -374,20 +419,23 @@ public sealed partial class SettingsForm : Form
     private void BuildTonemap()
     {
         var s = BeginSection("tonemap", L.T("section.tonemap"), _cfg.TonemapEnabled, v => _cfg.TonemapEnabled = v);
+        var def = new MirrorConfig();
         ComboRow(L.T("settings.operator"), new[] { "bt2390", "reinhard", "hable", "aces" }, _cfg.Operator, v => _cfg.Operator = v);
-        FloatRow(L.T("settings.paperwhite"), 80f, 400f, _cfg.TargetPaperwhite, "0", v => _cfg.TargetPaperwhite = v);
-        FloatRow(L.T("settings.source_peak"), 200f, 4000f, _cfg.SourcePeakNits, "0", v => _cfg.SourcePeakNits = v);
+        FloatRow(L.T("settings.paperwhite"), 80f, 400f, _cfg.TargetPaperwhite, "0", v => _cfg.TargetPaperwhite = v, def.TargetPaperwhite);
+        FloatRow(L.T("settings.source_peak"), 200f, 4000f, _cfg.SourcePeakNits, "0", v => _cfg.SourcePeakNits = v, def.SourcePeakNits);
         Note(L.T("settings.tonemap.note"));
         EndSection(s);
     }
 
     private void BuildAdjustments()
     {
-        var s = BeginSection("adjust", L.T("section.adjust"));
-        FloatRow(L.T("settings.exposure"), -3f, 3f, _cfg.Exposure, "0.00", v => _cfg.Exposure = v);
-        FloatRow(L.T("settings.saturation"), 0f, 2f, _cfg.Saturation, "0.00", v => _cfg.Saturation = v);
-        FloatRow(L.T("settings.contrast"), 0f, 2f, _cfg.Contrast, "0.00", v => _cfg.Contrast = v);
-        FloatRow(L.T("settings.gamma"), 0.3f, 3f, _cfg.Gamma, "0.00", v => _cfg.Gamma = v);
+        var s = BeginSection("adjust", L.T("section.adjust"), _cfg.AdjustEnabled, v => _cfg.AdjustEnabled = v);
+        var def = new MirrorConfig();
+        FloatRow(L.T("settings.exposure"), -3f, 3f, _cfg.Exposure, "0.00", v => _cfg.Exposure = v);   // default 0: type 0
+        FloatRow(L.T("settings.saturation"), 0f, 2f, _cfg.Saturation, "0.00", v => _cfg.Saturation = v, def.Saturation);
+        FloatRow(L.T("settings.contrast"), 0f, 2f, _cfg.Contrast, "0.00", v => _cfg.Contrast = v, def.Contrast);
+        FloatRow(L.T("settings.gamma"), 0.3f, 3f, _cfg.Gamma, "0.00", v => _cfg.Gamma = v, def.Gamma);
+        Note(L.T("settings.adjust.note"));
         EndSection(s);
     }
 
