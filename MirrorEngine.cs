@@ -369,38 +369,48 @@ public sealed class MirrorEngine
         var adapters = new List<IDXGIAdapter1>();
         var displays = new List<(IDXGIAdapter1 Adapter, IDXGIOutput6 Output,
                                  int L, int T, int R, int B, bool Hdr, string Name, string Friendly, string Key)>();
-        for (uint a = 0; ; a++)
-        {
-            if (factory.EnumAdapters1(a, out IDXGIAdapter1? ad).Failure || ad is null) break;
-            adapters.Add(ad);
-            string adName = ad.Description1.Description;
-            for (uint o = 0; ; o++)
-            {
-                if (ad.EnumOutputs(o, out IDXGIOutput? outp).Failure || outp is null) break;
-                var o6 = outp.QueryInterface<IDXGIOutput6>();
-                var d = o6.Description1;
-                bool hdr = d.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020
-                        || d.ColorSpace == ColorSpaceType.RgbFullG10NoneP709;
-                var dc = d.DesktopCoordinates;
-                meta.TryGetValue(d.DeviceName, out var mm);
-                string friendly = mm.Friendly ?? "";
-                string key = MakeKey(mm.DevicePath ?? "", friendly, d.DeviceName);
-                displays.Add((ad, o6, dc.Left, dc.Top, dc.Right, dc.Bottom, hdr, $"{d.DeviceName} [{adName}]", friendly, key));
-                outp.Dispose();
-                SetupLog($"  Display {displays.Count - 1}: {d.DeviceName} ({(friendly.Length > 0 ? friendly : "?")})  {dc.Right - dc.Left}x{dc.Bottom - dc.Top}  HDR={hdr}  [{adName}]");
-            }
-        }
-        if (displays.Count == 0) { factory.Dispose(); return (SelectionFailed(new LocalizedText("error.no_displays")), 0); }
-
-        // Always resolve the target monitor via stable identity (both source modes mirror to it);
-        // if the configured monitor is missing → clean abort with a plain-text message.
-        var ids = displays.Select(x => (Key: x.Key, Label: x.Friendly)).ToList();
+        // Every early return below — and an exception mid-enumeration — must release what was
+        // enumerated so far; with the 1 s waiting loop a leak here would repeat every second.
         void CleanupEnum()
         {
             foreach (var disp in displays) disp.Output.Dispose();
             foreach (var ad in adapters) ad.Dispose();
             factory.Dispose();
         }
+        try
+        {
+            for (uint a = 0; ; a++)
+            {
+                if (factory.EnumAdapters1(a, out IDXGIAdapter1? ad).Failure || ad is null) break;
+                adapters.Add(ad);
+                string adName = ad.Description1.Description;
+                for (uint o = 0; ; o++)
+                {
+                    if (ad.EnumOutputs(o, out IDXGIOutput? outp).Failure || outp is null) break;
+                    var o6 = outp.QueryInterface<IDXGIOutput6>();
+                    var d = o6.Description1;
+                    bool hdr = d.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020
+                            || d.ColorSpace == ColorSpaceType.RgbFullG10NoneP709;
+                    var dc = d.DesktopCoordinates;
+                    meta.TryGetValue(d.DeviceName, out var mm);
+                    string friendly = mm.Friendly ?? "";
+                    string key = MakeKey(mm.DevicePath ?? "", friendly, d.DeviceName);
+                    displays.Add((ad, o6, dc.Left, dc.Top, dc.Right, dc.Bottom, hdr, $"{d.DeviceName} [{adName}]", friendly, key));
+                    outp.Dispose();
+                    SetupLog($"  Display {displays.Count - 1}: {d.DeviceName} ({(friendly.Length > 0 ? friendly : "?")})  {dc.Right - dc.Left}x{dc.Bottom - dc.Top}  HDR={hdr}  [{adName}]");
+                }
+            }
+        }
+        catch
+        {
+            CleanupEnum();
+            throw;
+        }
+        if (displays.Count == 0) { CleanupEnum(); return (SelectionFailed(new LocalizedText("error.no_displays")), 0); }
+
+        // Always resolve the target monitor via stable identity (both source modes mirror to it);
+        // if the configured monitor is missing → clean abort with a plain-text message.
+        var ids = displays.Select(x => (Key: x.Key, Label: x.Friendly)).ToList();
         var (dstIdx, dstErr) = ResolveSelection(cfg.TargetKey, cfg.TargetLabel, cfg.TargetDisplay, ids, isSource: false);
         if (dstErr != null)
         {

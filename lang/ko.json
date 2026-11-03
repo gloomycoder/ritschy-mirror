@@ -161,7 +161,6 @@
   "error.waiting": "{0} — 대기 중 ({1}초마다 확인)",
   "error.still_stopping": "이전 미러링 세션이 아직 종료 중입니다. 잠시 후 다시 시도하세요.",
   "error.no_window_selected": "캡처 대상이 선택되지 않았습니다",
-  "error.no_capturable_windows": "캡처할 수 있는 창이 없습니다",
   "error.window_not_found": "창 '{0}'을(를) 찾을 수 없습니다 (앱이 실행 중인가요?)",
   "agent.dock_missing": "dock.html이 없습니다.",
   "dock.connecting": "연결 중…",

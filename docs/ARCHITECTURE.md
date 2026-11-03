@@ -229,7 +229,9 @@ second of the desktop returning, no reinit, no window flicker. WGC keeps deliver
 displays" (`MirrorEngine.IsWaitable`) are not failures: the session returns
 `SessionResult.Waiting`, the supervisor looks again every `WaitForSourceMs` (1 s, a few ms per
 check) until it is back — matched by its saved identity only, never another screen — and the UI
-shows "waiting". Manual start and autostart start anyway in that case. Real configuration errors
+shows "waiting". Manual start and autostart start anyway in that case. A window only counts as
+back when `WindowEnum.Match` finds the same one (exe + equal / extended / numbers-only-changed
+title), never merely another window of that exe. Real configuration errors
 (nothing selected, capture = output monitor, output on the primary monitor) still stop at once
 (`SessionResult.Fatal`) with their message.
 3. **Window-procedure lifetime (`Win32Window`)** — the window class is registered **once per

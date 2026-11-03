@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace RitschyMirror;
 
@@ -20,10 +21,11 @@ public sealed class WindowInfo
 /// List top-level windows (for the window picker) and resolve a saved selection
 /// identity-stably against the CURRENTLY open windows.
 ///
-/// Identity = process exe (primary, survives title changes like "Game — Level 2") + window title
-/// (secondary, to tell apart several windows of the same exe). HWNDs are NOT stable across
-/// program starts → so we remember exe+title, not the handle (same philosophy as the
-/// replug-proof monitor selection in <see cref="MirrorEngine.ResolveSelection"/>).
+/// Identity = process exe + window title. HWNDs are NOT stable across program starts → so we
+/// remember exe+title, not the handle (same philosophy as the replug-proof monitor selection in
+/// <see cref="MirrorEngine.ResolveSelection"/>). Since the engine waits for a missing window and
+/// resumes on its own, a match must be the SAME window — never just another window of that exe
+/// (see <see cref="Match"/>).
 /// </summary>
 public static class WindowEnum
 {
@@ -48,43 +50,46 @@ public static class WindowEnum
     }
 
     /// <summary>
-    /// Resolve saved (exe, title) against the currently open windows.
-    /// Order: same exe + exact title → same exe + title prefix → sole exe match
-    /// → exact title (no exe info) → nothing. Returns (hwnd, null) on a match, otherwise (Zero, user-facing error).
+    /// Resolve saved (exe, title) against the currently open windows. (hwnd, null) on a match,
+    /// otherwise (Zero, user-facing error). A saved window that isn't open — including when no
+    /// capturable window exists at all — is "window not found", which the engine waits for.
     /// </summary>
     public static (IntPtr hwnd, LocalizedText? error) Resolve(string exe, string title)
     {
-        var wins = List();
-        if (wins.Count == 0) return (IntPtr.Zero, new LocalizedText("error.no_capturable_windows"));
-
         bool hasExe = !string.IsNullOrWhiteSpace(exe);
         bool hasTitle = !string.IsNullOrWhiteSpace(title);
         if (!hasExe && !hasTitle)
             return (IntPtr.Zero, new LocalizedText("error.no_window_selected"));
 
-        if (hasExe)
-        {
-            var sameExe = wins.Where(w => string.Equals(w.Exe, exe, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (sameExe.Count == 1) return (sameExe[0].Hwnd, null);
-            if (sameExe.Count > 1)
-            {
-                var exact = sameExe.FirstOrDefault(w => string.Equals(w.Title, title, StringComparison.OrdinalIgnoreCase));
-                if (exact != null) return (exact.Hwnd, null);
-                var prefix = sameExe.FirstOrDefault(w =>
-                    hasTitle && w.Title.StartsWith(title, StringComparison.OrdinalIgnoreCase));
-                if (prefix != null) return (prefix.Hwnd, null);
-                return (sameExe[0].Hwnd, null); // several with the same exe, no title match → first
-            }
-        }
-        if (hasTitle)
-        {
-            var byTitle = wins.FirstOrDefault(w => string.Equals(w.Title, title, StringComparison.OrdinalIgnoreCase));
-            if (byTitle != null) return (byTitle.Hwnd, null);
-        }
-
-        string what = hasTitle ? title : exe;
-        return (IntPtr.Zero, new LocalizedText("error.window_not_found", what));
+        var match = Match(List(), exe, title);
+        if (match != null) return (match.Hwnd, null);
+        return (IntPtr.Zero, new LocalizedText("error.window_not_found", hasTitle ? title : exe));
     }
+
+    /// <summary>
+    /// The saved window among <paramref name="wins"/>, or null. Only the same window counts: same exe
+    /// (when saved) and a title that is equal, extends the saved one ("Game" → "Game — Level 2"), or
+    /// differs only in its numbers ("Game - 533972" → "Game - 612345": builds, session ids). Never
+    /// another window of that exe — browser window A closed while B stays open means waiting for A,
+    /// not mirroring B. An exe saved without a title (old configs) takes that exe's first window.
+    /// </summary>
+    public static WindowInfo? Match(IReadOnlyList<WindowInfo> wins, string exe, string title)
+    {
+        const StringComparison oic = StringComparison.OrdinalIgnoreCase;
+        bool hasExe = !string.IsNullOrWhiteSpace(exe);
+        bool hasTitle = !string.IsNullOrWhiteSpace(title);
+        var pool = hasExe ? wins.Where(w => string.Equals(w.Exe, exe, oic)).ToList() : wins.ToList();
+        if (!hasTitle) return hasExe ? pool.FirstOrDefault() : null;
+
+        string stable = StableTitle(title);
+        return pool.FirstOrDefault(w => string.Equals(w.Title, title, oic))
+            ?? pool.FirstOrDefault(w => w.Title.StartsWith(title, oic))
+            ?? pool.FirstOrDefault(w => StableTitle(w.Title) == stable);
+    }
+
+    /// <summary>Title with every run of digits replaced by one marker, whitespace collapsed, case folded.</summary>
+    private static string StableTitle(string title) =>
+        Regex.Replace(Regex.Replace(title.Trim(), @"\d+", "#"), @"\s+", " ").ToLowerInvariant();
 
     // ── Filter: is this a "real", capturable app window? ───────────────────
     private static bool IsCapturable(IntPtr hWnd, uint ownPid, out string title, out int pid, out string exe)

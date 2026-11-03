@@ -161,7 +161,6 @@
   "error.waiting": "{0} — waiting, checking every {1} s",
   "error.still_stopping": "The previous mirror session is still shutting down — try again in a moment.",
   "error.no_window_selected": "No capture target selected",
-  "error.no_capturable_windows": "No capturable windows found",
   "error.window_not_found": "Window '{0}' not found (is the application running?)",
   "agent.dock_missing": "dock.html is missing.",
   "dock.connecting": "connecting…",

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Window capture only resumes on the same window.** A missing window is matched by exe + title
+  (equal, extended, or differing only in numbers like a build / session id) — no longer by "any
+  window of that exe", so closing browser window A while B stays open waits for A instead of
+  mirroring B. A saved window also counts as "waiting" when no capturable window exists at all.
+- Fixed: a session that found no displays didn't release the enumerated graphics adapters (now
+  every exit and exception path of the enumeration cleans up — it can repeat every second while
+  waiting).
+- Docs: the game-impact section now says what was measured (no switch to composition, no
+  meaningful difference) instead of "no impact", and that the mirror still shares the GPU.
+
 ## v1.4.13 — clearer UI wording, output-monitor docs, game-impact measurement
 
 - **UI wording pass (en / ko / de).** "Capture card" is no longer assumed in the UI (the mirror goes
