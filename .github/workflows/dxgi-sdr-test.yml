@@ -1,4 +1,4 @@
-name: DXGI SDR Gamma Test (Windows EXE)
+name: DXGI SDR + Hide Mirror Taskbar (Windows EXE)
 
 on:
   workflow_dispatch:
@@ -31,6 +31,20 @@ jobs:
           [System.IO.File]::WriteAllText($path, $source)
           Write-Host 'Experimental DXGI SDR-only gamma patch applied.'
 
+      - name: Hide mirror output window from taskbar and Alt+Tab
+        shell: pwsh
+        run: |
+          $path = 'Win32Window.cs'
+          $source = [System.IO.File]::ReadAllText($path)
+          $old = 'uint exStyle = borderless ? 0x00000008u /*WS_EX_TOPMOST*/ : 0u;'
+          $new = 'uint exStyle = (borderless ? 0x00000008u /*WS_EX_TOPMOST*/ : 0u) | 0x00000080u /*WS_EX_TOOLWINDOW*/;'
+          if (($source.Split([string[]]@($old), [StringSplitOptions]::None).Length - 1) -ne 1) {
+            throw 'Expected exactly one output window exStyle assignment; review upstream changes.'
+          }
+          $source = $source.Replace($old, $new)
+          [System.IO.File]::WriteAllText($path, $source)
+          Write-Host 'Mirror output window taskbar/Alt+Tab hiding patch applied.'
+
       - name: Build standalone Windows x64 executable
         shell: pwsh
         run: |
@@ -41,6 +55,6 @@ jobs:
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: RitschyMirror-DXGI-SDR-Gamma-Test-win-x64
+          name: RitschyMirror-DXGI-SDR-HideTaskbar-win-x64
           path: publish/
           if-no-files-found: error
