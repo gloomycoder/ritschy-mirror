@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.17 — DXGI SDR colour detection, mirror window off the taskbar
+
+- **DXGI with an SDR desktop: colours detected per graphics driver.** The duplicated FP16 buffer is
+  linear on NVIDIA (measured), but on a display driven by an AMD Radeon it can arrive sRGB-encoded,
+  which looked washed out. When mirroring starts, a few pixels of a captured frame are compared with
+  what Windows shows and the right reading is chosen (result in the log). Setting *DXGI SDR colours*
+  (`dxgi_sdr_encoding`: automatic / linear / sRGB-encoded, live) overrides it. WGC and HDR sources
+  are unchanged.
+- **The mirror window no longer appears in the taskbar or Alt+Tab** (tool window) — it isn't a
+  window to switch to.
+- **Audio log shows the effective gain** — on start and whenever the gain or volume follow changes:
+  e.g. `gain +6.0 dB, follows volume -10.6 dB → -4.6 dB`. Gain and the followed device volume
+  multiply (measured: +6 dB doubles the level while following).
+- Removed the build-time test workflow (`dxgi-sdr-test.yml`); its patches are now real features.
+
 ## v1.4.16 — picture adjustments on/off, typed slider values with reset
 
 - **Picture adjustments can be switched off** — the section (exposure / saturation / contrast /

@@ -515,7 +515,8 @@ public sealed class MirrorEngine
                     D3D11CreateDevice(src.Adapter, DriverType.Unknown, DeviceCreationFlags.BgraSupport, featureLevels,
                         out device, out context).CheckError();
                     SetupLog($"Source = Display {srcIdx} ({src.Name}) via DXGI, target = Display {dstIdx} ({dst.Name}), output_mode={mode}, layout={cfg.LayoutMode}");
-                    capture = new DuplicationCapture(device, src.Output);
+                    capture = new DuplicationCapture(device, src.Output, Log);
+                    capture.ApplyLiveConfig(cfg);
                 }
             }
 
@@ -776,6 +777,7 @@ public sealed class MirrorEngine
         to.AudioFollowVolume = from.AudioFollowVolume;
         to.WindowTitleSimilar = from.WindowTitleSimilar;
         to.AdjustEnabled = from.AdjustEnabled;
+        to.DxgiSdrEncoding = from.DxgiSdrEncoding;
     }
 
     private void LogFramePacing(MirrorConfig cfg)

@@ -78,6 +78,9 @@ public sealed class MirrorConfig
     // Monitor capture API (capture_mode="monitor"): "dxgi" (Desktop Duplication, default) |
     // "wgc" (Windows.Graphics.Capture — cross-GPU, cursor composited by Windows).
     [JsonPropertyName("monitor_api")]      public string MonitorApi { get; set; } = "dxgi";
+    // How a DXGI FP16 buffer encodes an SDR desktop — driver-dependent: "auto" (detected at start),
+    // "linear" or "srgb". Live.
+    [JsonPropertyName("dxgi_sdr_encoding")] public string DxgiSdrEncoding { get; set; } = "auto";
     // Window identity (only capture_mode="window"): exe (primary, stable) + title (secondary, to
     // tell apart multiple windows of the same exe). Analogous to the replug-proof monitor identity.
     [JsonPropertyName("window_exe")]       public string WindowExe { get; set; } = "";
@@ -148,6 +151,14 @@ public sealed class MirrorConfig
     public string ResolveMonitorApi()
         => (MonitorApi ?? "").Trim().ToLowerInvariant() == "wgc" ? "wgc" : "dxgi";
 
+    /// <summary>Effective dxgi_sdr_encoding: "linear", "srgb" or (default) "auto".</summary>
+    public string ResolveDxgiSdrEncoding() => (DxgiSdrEncoding ?? "").Trim().ToLowerInvariant() switch
+    {
+        "linear" => "linear",
+        "srgb" => "srgb",
+        _ => "auto",
+    };
+
     /// <summary>Effective source mode: "window" or (default) "monitor".</summary>
     public string ResolveCaptureMode()
         => (CaptureMode ?? "").Trim().ToLowerInvariant() == "window" ? "window" : "monitor";
@@ -160,7 +171,7 @@ public sealed class MirrorConfig
         "layout_mode", "crop_x", "crop_y", "crop_w", "crop_h", "show_cursor", "keep_awake",
         "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror", "audio_sources", "scale_filter",
         "audio_render_gain_db", "audio_capture_gain_db", "audio_output_id", "audio_output_name",
-        "audio_follow_volume", "window_title_similar", "adjust_enabled",
+        "audio_follow_volume", "window_title_similar", "adjust_enabled", "dxgi_sdr_encoding",
     };
     public static readonly HashSet<string> StructKeys = new(StringComparer.OrdinalIgnoreCase)
     {

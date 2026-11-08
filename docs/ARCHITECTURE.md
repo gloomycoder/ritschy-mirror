@@ -5,7 +5,7 @@ Internal/technical documentation. For the user-facing overview see the main
 
 ## Pipeline
 
-**DXGI Desktop Duplication** (FP16, always linear scRGB) → **HLSL tonemap shader**
+**DXGI Desktop Duplication** (FP16, linear scRGB — SDR encoding detected per driver) → **HLSL tonemap shader**
 (`bt2390` / `reinhard` / `hable` / `aces`) → layout/crop composite → **flip-model
 swap chain** (8- or 10-bit). The render device is created on the **source adapter**
 (Desktop Duplication is adapter-bound); when the target display hangs off a
@@ -29,11 +29,24 @@ Two properties of the source are easy to conflate, and conflating them is exactl
 an SDR source come out far too dark before v1.3.2:
 
 1. **Encoding of the captured buffer.** Both capture sources request
-   `R16G16B16A16_FLOAT`, and that buffer is **always linear scRGB — also when the display is
-   in SDR mode**. This is measured, not assumed: painting sRGB greys 255/192/128/64 on an SDR
-   display and reading the duplicated FP16 buffer back yields `1.0000 / 0.5273 / 0.2158 /
-   0.0513`, i.e. exactly `srgb_to_linear(v)`. Never sRGB-decode this buffer — that applies a
-   second gamma and the output ends up at the *linear* value (mid-grey 128 → 55).
+   `R16G16B16A16_FLOAT`, and that buffer is **linear scRGB — normally also when the display is
+   in SDR mode**. Measured on an NVIDIA-driven display: painting sRGB greys 255/192/128/64 on an
+   SDR display and reading the duplicated FP16 buffer back yields `1.0000 / 0.5273 / 0.2158 /
+   0.0513`, i.e. exactly `srgb_to_linear(v)`. Decoding that buffer again applies a second gamma
+   (mid-grey 128 → 55).
+
+   **Exception — DXGI with an SDR desktop on some drivers.** With a display on an AMD Radeon the
+   duplicated FP16 buffer was reported to carry the *sRGB-encoded* values instead (a linear
+   reading looks washed out). WGC is not affected. So `DuplicationCapture` detects it
+   (`SdrEncodingProbe`): shortly after the session starts it reads 24 points of a captured frame
+   (one small staging readback) and the same points as Windows shows them (one GDI `BitBlt`,
+   8-bit sRGB), and per mid-tone channel checks whether the FP16 value matches
+   `srgb_to_linear(gdi)` (linear) or `gdi` itself (sRGB). It needs ≥ 8 votes with ≥ 80 %
+   agreement; a dark, flat or changing picture is retried every 2 s (15 tries, then linear).
+   It runs again after a capture loss (new duplication) and when HDR is switched off; rotated
+   outputs and HDR sources are not probed (linear). `dxgi_sdr_encoding` = `auto` (default) /
+   `linear` / `srgb` overrides it (live); the result is logged
+   (`DXGI SDR encoding detected: linear (34 linear / 1 sRGB of 72 channel samples)`).
 2. **Value range.** Whether anything reaches above the white point. That depends on the
    display's HDR state, which is what `ICaptureSource.InputIsHdr` reports.
 
@@ -42,7 +55,7 @@ computed in `Renderer.ResolveSourceLight`:
 
 | cbuffer field | HDR source | SDR source |
 |---|---|---|
-| `SrcIsLinear` | `1` — no sRGB decode (both sources deliver FP16) | `1` |
+| `SrcIsLinear` | `1` — no sRGB decode (both sources deliver FP16) | `1`, `0` for a DXGI buffer detected/set as sRGB-encoded (`ICaptureSource.SourceIsSrgbEncoded`) |
 | `SrcScale` — buffer value → working light, `1.0` = white point | `80 / target_paperwhite` (scRGB: `1.0` = 80 nits) | `1.0` (white already *is* the white point) |
 | `SrcPeak` — source peak in white-point units | `max(source_peak_nits / target_paperwhite, 1)` | `1.0` |
 
@@ -285,7 +298,8 @@ the title, at the risk of a similarly named other window. Real configuration err
 | `SettingsForm.Audio.cs` | Audio section of the settings window (device checkboxes + gains); rebuilds the output or input rows in place on device notifications |
 | `LoopbackVolume.cs` | Which part of an output device's volume/mute its loopback still lacks |
 | `Localization.cs` | Language packs (`L`), `LocalizedText` for user-facing errors |
-| `Win32Window.cs` | Window + mouse-lock hook (`WH_MOUSE_LL`, on its own dedicated thread so the cursor stays smooth — the hook is never serviced on the vsync-bound render thread) |
+| `SdrEncodingProbe.cs` | Detects whether a DXGI FP16 buffer holds an SDR desktop linear or sRGB-encoded (frame vs. GDI at 24 points) |
+| `Win32Window.cs` | Window (`WS_EX_TOOLWINDOW`: never in the taskbar / Alt+Tab) + mouse-lock hook (`WH_MOUSE_LL`, on its own dedicated thread so the cursor stays smooth — the hook is never serviced on the vsync-bound render thread) |
 | `MonitorNames.cs` | Friendly EDID monitor names (CCD `QueryDisplayConfig`) |
 | `ControlAgent.cs` | HTTP control agent (`HttpListener`) |
 | `MirrorConfig.cs` | Render config (`mirror_config.json`) |
@@ -303,7 +317,7 @@ remote controller all write the same file; the render loop reads it live.
 `vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`,
 `target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`, `audio_sources`,
 `audio_render_gain_db`, `audio_capture_gain_db`, `audio_output_id`, `audio_output_name`,
-`audio_follow_volume`, `window_title_similar`, `scale_filter`.
+`audio_follow_volume`, `window_title_similar`, `dxgi_sdr_encoding`, `scale_filter`.
 
 `tonemap_enabled`, `operator`, `source_peak_nits` and `target_paperwhite` are only in effect for
 an **HDR** source — see [Colour pipeline](#colour-pipeline--hdr-vs-sdr-source).

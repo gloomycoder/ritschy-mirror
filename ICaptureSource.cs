@@ -31,6 +31,10 @@ public interface ICaptureSource : IDisposable
     /// render restart. Sources without changeable state: no-op.</summary>
     void RefreshSourceState();
 
+    /// <summary>The FP16 buffer holds an SDR desktop sRGB-encoded rather than linear — the shader then
+    /// decodes it. Only DXGI on some drivers (see <see cref="SdrEncodingProbe"/>); WGC: always false.</summary>
+    bool SourceIsSrgbEncoded { get; }
+
     /// <summary>Shader-readable copy of the last frame (R16G16B16A16_Float). null = no frame yet.</summary>
     ID3D11ShaderResourceView? Srv { get; }
 

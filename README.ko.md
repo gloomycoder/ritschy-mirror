@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.4.16-2ea0c9">
+  <img src="https://img.shields.io/badge/version-1.4.17-2ea0c9">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20(x64)-2ea0c9">
   <img src="https://img.shields.io/badge/license-MIT-3aa757">
   <img src="https://img.shields.io/badge/.NET-9-512bd4">
@@ -59,6 +59,8 @@ TV로 내보낼 때도 똑같이 쓸 수 있습니다.
   HDR과 멀티 GPU를 인식합니다(캡처와 출력이 **서로 다른 그래픽카드**에 연결되어 있어도 됩니다).
 - 🧭 **모니터 캡처 방식 선택** — DXGI Desktop Duplication(기본, 부하 최소) 또는
   Windows.Graphics.Capture(GPU가 달라도 동작, 커서를 Windows가 그림) 중에서 고를 수 있습니다.
+  DXGI로 SDR 화면을 캡처할 때 드라이버가 색을 어떻게 넘겨주는지(NVIDIA는 선형, 일부 AMD 환경은 sRGB)
+  자동으로 판별하며, 직접 지정할 수도 있습니다.
 - 🪟 **모니터 전체 대신 창 하나 / 전체화면 앱만 미러링**할 수도 있습니다 — 예를 들어 게임 하나만
   고르면 그 창만 출력되므로, **Alt+Tab 해도 바탕화면이 출력 모니터(방송)로 새어 나가지 않습니다.**
   Windows.Graphics.Capture(최신 OS API)를 사용하며 *인젝션 방식이 아니라서* 안티치트 걱정이 없고,
@@ -120,7 +122,7 @@ TV로 내보낼 때도 똑같이 쓸 수 있습니다.
 ## 다운로드 및 설치
 
 1. [**Releases**](https://github.com/gloomycoder/ritschy-mirror/releases) 페이지에서
-   **`RitschyMirror-1.4.16-portable.zip`**을 내려받습니다.
+   **`RitschyMirror-1.4.17-portable.zip`**을 내려받습니다.
 2. 쓰기 권한이 있는 아무 폴더에나 압축을 풉니다(예: `D:\Tools\RitschyMirror`). 안에는 .NET 설치가
    필요 없는 단일 실행 파일 `RitschyMirror.exe`와 기본 설정이 든 `config\` 폴더가 있습니다.
 3. `RitschyMirror.exe`를 실행하면 트레이에서 시작됩니다. 관리자 권한이나 UAC 확인창은 필요 없고,

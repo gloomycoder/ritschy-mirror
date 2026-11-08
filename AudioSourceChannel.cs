@@ -99,18 +99,34 @@ internal sealed class AudioSourceChannel : IDisposable
         _recorder.RecordingStopped += OnStopped;
     }
 
-    /// <summary>Linear gain; read by the playback thread, a plain float write is enough.</summary>
-    public void SetGain(float linear)
+    /// <summary>Linear gain; read by the playback thread, a plain float write is enough.
+    /// Returns whether it changed.</summary>
+    public bool SetGain(float linear)
     {
+        bool changed = linear != _userGain;
         _userGain = linear;
         ApplyGain();
+        return changed;
+    }
+
+    /// <summary>"gain +6.0 dB, follows volume -10.6 dB → -4.6 dB" for logs: what is really applied.</summary>
+    public string GainText
+    {
+        get
+        {
+            float user = _userGain, total = user * (_follow ? _followFactor : 1f);
+            string Db(float v) => v <= 0 ? "-inf dB" : $"{20 * Math.Log10(v):+0.0;-0.0;0.0} dB";
+            return $"gain {Db(user)}" + (_follow ? $", {FollowText} → {Db(total)}" : "");
+        }
     }
 
     /// <summary>Apply (or ignore) the captured output device's Windows volume and mute.</summary>
-    public void SetFollowVolume(bool follow)
+    public bool SetFollowVolume(bool follow)
     {
+        bool before = _follow;
         _follow = follow && _endpointVolume != null;
         ApplyGain();
+        return before != _follow;
     }
 
     /// <summary>"follows volume -12.3 dB" / "… muted" / software-volume note for logs; "" when not following.</summary>

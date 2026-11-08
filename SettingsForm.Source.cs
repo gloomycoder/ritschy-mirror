@@ -17,6 +17,7 @@ public sealed partial class SettingsForm
     private ComboBox _sourceCombo = null!;
     private Label _sourceNote = null!;
     private CheckBox _similarTitle = null!;
+    private ComboBox _sdrEncoding = null!;
 
     private bool IsWindowMode => _cfg.ResolveCaptureMode() == "window";
 
@@ -52,6 +53,12 @@ public sealed partial class SettingsForm
             PopulateSources();   // the shown selection follows the same rule
         });
         Note(L.T("settings.window_title_similar.note"));
+
+        // Monitor (DXGI) only: how the SDR desktop buffer is encoded (driver-dependent).
+        _sdrEncoding = ChoiceRow(L.T("settings.dxgi_sdr_encoding"),
+            new[] { "auto", "linear", "srgb" }.Select(m => (m, L.T("enc." + m))).ToArray(),
+            _cfg.ResolveDxgiSdrEncoding(), v => _cfg.DxgiSdrEncoding = v);
+        Note(L.T("settings.dxgi_sdr_encoding.note"));
         PopulateSources();
     }
 
@@ -91,6 +98,7 @@ public sealed partial class SettingsForm
         _sourceCombo.SelectedIndex = sel;
         _sourceNote.Text = missing;
         if (_similarTitle != null) _similarTitle.Enabled = IsWindowMode;
+        if (_sdrEncoding != null) _sdrEncoding.Enabled = CurrentCaptureMode() == "monitor_dxgi";
         _loading = wasLoading;
     }
 

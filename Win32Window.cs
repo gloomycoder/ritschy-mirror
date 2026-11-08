@@ -66,7 +66,9 @@ public sealed class Win32Window
 
         // Borderless (WS_POPUP) for fullscreen, otherwise overlapped window.
         uint style = borderless ? 0x80000000 /*WS_POPUP*/ : 0x00CF0000 /*WS_OVERLAPPEDWINDOW*/;
-        uint exStyle = borderless ? 0x00000008u /*WS_EX_TOPMOST*/ : 0u;
+        // WS_EX_TOOLWINDOW: the mirror output never shows up in the taskbar or Alt+Tab (it is not a
+        // window to switch to, and on the output monitor it would only get in the way).
+        uint exStyle = (borderless ? 0x00000008u /*WS_EX_TOPMOST*/ : 0u) | 0x00000080u /*WS_EX_TOOLWINDOW*/;
 
         Hwnd = CreateWindowEx(
             exStyle, ClassName, title, style,

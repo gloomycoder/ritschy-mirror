@@ -215,6 +215,9 @@ public sealed class WgcCapture : ICaptureSource
     /// <summary>Re-create session/frame pool on the same window (transient errors).
     /// If the window is closed → false: the supervisor does a full reinit, which re-resolves the selection
     /// and then stops cleanly with "window not found" (instead of spinning blindly).</summary>
+    /// <summary>WGC's FP16 frames are always linear scRGB.</summary>
+    public bool SourceIsSrgbEncoded => false;
+
     /// <summary>WGC keeps delivering (the last image) across the secure desktop, so a failed recover is real.</summary>
     public bool AwaitingAccess => false;
 

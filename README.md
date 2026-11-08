@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.4.16-2ea0c9">
+  <img src="https://img.shields.io/badge/version-1.4.17-2ea0c9">
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20(x64)-2ea0c9">
   <img src="https://img.shields.io/badge/license-MIT-3aa757">
   <img src="https://img.shields.io/badge/.NET-9-512bd4">
@@ -59,7 +59,9 @@ an audience, a portable display or a TV.
 - 🎯 **Pick capture target & output monitor** from dropdowns — real monitor names (e.g. *AORUS FO32U2P*),
   HDR-aware, multi-GPU aware (capture and output may even hang off **different graphics cards**).
 - 🧭 **Choose the monitor capture API** — DXGI Desktop Duplication (default, lowest overhead) or
-  Windows.Graphics.Capture (works across GPUs, cursor drawn by Windows).
+  Windows.Graphics.Capture (works across GPUs, cursor drawn by Windows). With DXGI and an SDR
+  desktop, how the driver encodes the colours (linear on NVIDIA, sRGB-encoded on some AMD setups) is
+  detected automatically — or set by hand.
 - 🪟 **Or mirror a single window / fullscreen app** instead of a whole monitor — pick one app
   (e.g. just your game). Only that window is shown, so **alt-tabbing never flashes your desktop**
   onto the output monitor (or into your stream). Built on Windows.Graphics.Capture (the modern OS API, *not* injection →
@@ -121,7 +123,7 @@ an audience, a portable display or a TV.
 ## Download & Install
 
 1. Go to the [**Releases**](https://github.com/gloomycoder/ritschy-mirror/releases) page and
-   download **`RitschyMirror-1.4.16-portable.zip`**.
+   download **`RitschyMirror-1.4.17-portable.zip`**.
 2. Extract it anywhere you can write to (e.g. `D:\Tools\RitschyMirror`). It contains a single,
    self-contained `RitschyMirror.exe` (no .NET install needed) and `config\` with the defaults.
 3. Run `RitschyMirror.exe` — the app starts in your tray; no admin / UAC prompt. `log\` is created

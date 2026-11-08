@@ -151,9 +151,9 @@ public sealed class Renderer : IDisposable
             Gamma = adjust ? cfg.Gamma : 1f,
             OperatorId = cfg.OperatorId,
             TonemapEnabled = cfg.TonemapEnabled ? 1 : 0,
-            // Both sources (Desktop Duplication + WGC) deliver R16G16B16A16_FLOAT and thus
-            // ALWAYS linear scRGB — regardless of the monitor's HDR mode.
-            SrcIsLinear = 1,
+            // Both sources deliver R16G16B16A16_FLOAT, normally linear scRGB in either HDR mode — except
+            // a DXGI SDR desktop on drivers that hand it over sRGB-encoded (detected or set).
+            SrcIsLinear = cap.SourceIsSrgbEncoded ? 0 : 1,
             OutputIsHdr = 0, // SDR output (passthrough HDR is phase 2)
             CropMinX = cropMinX, CropMinY = cropMinY,
             CropMaxX = cropMaxX, CropMaxY = cropMaxY,

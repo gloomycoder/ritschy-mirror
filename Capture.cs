@@ -31,6 +31,23 @@ public sealed class DuplicationCapture : ICaptureSource
     public bool InputIsHdr { get; private set; }
     public ID3D11ShaderResourceView? Srv => _srv;
 
+    // How the FP16 buffer encodes an SDR desktop (driver-dependent, see SdrEncodingProbe):
+    // dxgi_sdr_encoding = auto (probe) | linear | srgb.
+    private const long ProbeDelayMs = 500, ProbeRetryMs = 2000;
+    private const int MaxProbeAttempts = 15;
+    private readonly Action<string> _log;
+    private readonly int _left, _top;
+    private readonly bool _rotated;
+    private string _encodingMode = "auto";
+    private SdrEncodingProbe.Result _probed = SdrEncodingProbe.Result.Unknown;
+    private int _probeAttempts;
+    private bool _probeGaveUp;
+    private long _nextProbeMs;
+
+    /// <summary>SDR desktop delivered sRGB-encoded (decode it) instead of linear — by setting or probe.</summary>
+    public bool SourceIsSrgbEncoded => !InputIsHdr &&
+        (_encodingMode == "srgb" || (_encodingMode == "auto" && _probed == SdrEncodingProbe.Result.Srgb));
+
     public bool CursorVisible { get; private set; }
     public int CursorX { get; private set; }
     public int CursorY { get; private set; }
@@ -38,15 +55,65 @@ public sealed class DuplicationCapture : ICaptureSource
     public int CursorH { get; private set; }
     public ID3D11ShaderResourceView? CursorSrv => _cursorSrv;
 
-    public DuplicationCapture(ID3D11Device device, IDXGIOutput6 output)
+    public DuplicationCapture(ID3D11Device device, IDXGIOutput6 output, Action<string> log)
     {
         _device = device;
         _output = output;
+        _log = log;
         var desc = output.Description1;
+        _left = desc.DesktopCoordinates.Left;
+        _top = desc.DesktopCoordinates.Top;
+        _rotated = desc.Rotation is not (ModeRotation.Identity or ModeRotation.Unspecified);
         Width = desc.DesktopCoordinates.Right - desc.DesktopCoordinates.Left;
         Height = desc.DesktopCoordinates.Bottom - desc.DesktopCoordinates.Top;
         InputIsHdr = ReadHdrState();
         _dup = output.DuplicateOutput1(_device, 1, new[] { Format.R16G16B16A16_Float });
+        ResetProbe();
+    }
+
+    /// <summary>Detect the SDR encoding again (new duplication, HDR switched off).</summary>
+    private void ResetProbe()
+    {
+        _probed = SdrEncodingProbe.Result.Unknown;
+        _probeAttempts = 0;
+        _probeGaveUp = false;
+        _nextProbeMs = Environment.TickCount64 + ProbeDelayMs;
+    }
+
+    /// <summary>Auto mode, SDR, not decided yet: compare a captured frame with the screen. Undecided
+    /// (dark / flat / changing picture) → try again a bit later; until then the buffer counts as linear.</summary>
+    private void ProbeEncoding(ID3D11DeviceContext ctx)
+    {
+        if (_encodingMode != "auto" || InputIsHdr || _probed != SdrEncodingProbe.Result.Unknown || _probeGaveUp) return;
+        long now = Environment.TickCount64;
+        if (now < _nextProbeMs || _copyTex is null) return;
+        if (_rotated)
+        {
+            _probeGaveUp = true;
+            _log("DXGI SDR encoding: rotated output, not detected — treated as linear (dxgi_sdr_encoding sets it).");
+            return;
+        }
+        try
+        {
+            var (result, detail) = SdrEncodingProbe.Run(_device, ctx, _copyTex, _left, _top, Width, Height);
+            if (result != SdrEncodingProbe.Result.Unknown)
+            {
+                _probed = result;
+                _log($"DXGI SDR encoding detected: {(result == SdrEncodingProbe.Result.Srgb ? "sRGB-encoded → decoded" : "linear")} ({detail}).");
+                return;
+            }
+            if (++_probeAttempts >= MaxProbeAttempts)
+            {
+                _probeGaveUp = true;
+                _log($"DXGI SDR encoding: not determined after {MaxProbeAttempts} tries ({detail}) — treated as linear.");
+            }
+            else _nextProbeMs = now + ProbeRetryMs;
+        }
+        catch (Exception ex)
+        {
+            _probeGaveUp = true;
+            _log("DXGI SDR encoding probe failed (" + ex.Message + ") — treated as linear.");
+        }
     }
 
     /// <summary>Read the current HDR state of the output. Not readable (output currently in a
@@ -64,7 +131,12 @@ public sealed class DuplicationCapture : ICaptureSource
 
     /// <summary>HDR on/off at the monitor is tracked during operation — otherwise after a
     /// toggle the shader keeps using the wrong source curve (too dark or blown out).</summary>
-    public void RefreshSourceState() => InputIsHdr = ReadHdrState();
+    public void RefreshSourceState()
+    {
+        bool hdr = ReadHdrState();
+        if (InputIsHdr && !hdr) ResetProbe();   // back to SDR: the encoding may differ again
+        InputIsHdr = hdr;
+    }
 
     /// <summary>True if a new frame was acquired + copied; false on timeout.
     /// If the duplication is dead (after a failed recreate), the method returns false
@@ -84,6 +156,7 @@ public sealed class DuplicationCapture : ICaptureSource
             EnsureTarget(tex.Description);
             ctx.CopyResource(_copyTex!, tex);
             UpdateCursor(frameInfo);
+            ProbeEncoding(ctx);
         }
         finally
         {
@@ -214,6 +287,7 @@ public sealed class DuplicationCapture : ICaptureSource
             // The most common trigger for ACCESS_LOST is a mode switch — e.g. HDR on/off.
             // So the source state must be re-read here, not carried over from before.
             RefreshSourceState();
+            ResetProbe();
             return true;
         }
         catch (Exception ex)
@@ -241,9 +315,15 @@ public sealed class DuplicationCapture : ICaptureSource
                   or DXGI_ERROR_SESSION_DISCONNECTED;
     }
 
-    /// <summary>No-op: with monitor capture the renderer composites the cursor (separately from DXGI),
-    /// so there is no source-side live state to track.</summary>
-    public void ApplyLiveConfig(MirrorConfig cfg) { }
+    /// <summary>The cursor is composited by the renderer (separately from DXGI); the only source-side
+    /// live setting is how an SDR buffer is encoded (dxgi_sdr_encoding).</summary>
+    public void ApplyLiveConfig(MirrorConfig cfg)
+    {
+        string mode = cfg.ResolveDxgiSdrEncoding();
+        if (mode == _encodingMode) return;
+        _encodingMode = mode;
+        _log("DXGI SDR encoding: " + (mode == "auto" ? "automatic" : mode + " (setting)") + ".");
+    }
 
     public void Dispose()
     {

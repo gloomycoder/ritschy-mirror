@@ -107,8 +107,9 @@ public sealed class AudioMirror : IDisposable
             _compositionKey = composition;
             foreach (var ch in _channels)
             {
-                ch.SetGain(GainFor(ch.ConfigKey, ch.IsRender));
-                ch.SetFollowVolume(_followVolume);
+                bool changed = ch.SetGain(GainFor(ch.ConfigKey, ch.IsRender));
+                changed |= ch.SetFollowVolume(_followVolume);
+                if (changed) _log($"Audio mirror \"{ch.Name}\": {ch.GainText}.");
             }
         }
         if (!rebuild) return;
@@ -411,8 +412,8 @@ public sealed class AudioMirror : IDisposable
         _out = player;
         _outDevice = dst;
         foreach (var ch in channels)
-            _log($"Audio mirror source: \"{ch.Name}\" ({(ch.IsRender ? "loopback" : "input")}, {ch.CaptureFormat}" +
-                 (ch.FollowText.Length > 0 ? ", " + ch.FollowText : "") + ").");
+            _log($"Audio mirror source: \"{ch.Name}\" ({(ch.IsRender ? "loopback" : "input")}, {ch.CaptureFormat}, " +
+                 ch.GainText + ").");
         _log($"Audio mirror running: {channels.Count} source(s) → \"{dst.FriendlyName}\".");
     }
 

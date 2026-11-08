@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.17 ✓
+
+- **DXGI SDR encoding** — linear vs. sRGB-encoded detected per driver (setting to override); mirror
+  window kept off the taskbar / Alt+Tab; effective audio gain logged.
+
 ## Done in v1.4.16 ✓
 
 - **Adjustments switch & typed sliders** — picture adjustments on/off (settings + dock); every slider
