@@ -1,5 +1,10 @@
 # Roadmap
 
+## Done in v1.4.18 ✓
+
+- **VBlank wait** — optional wait for the output display's vblank with VSync (caps the output where
+  a driver override or composition lets it run faster); refresh rate and rate check in the log.
+
 ## Done in v1.4.17 ✓
 
 - **DXGI SDR encoding** — linear vs. sRGB-encoded detected per driver (setting to override); mirror

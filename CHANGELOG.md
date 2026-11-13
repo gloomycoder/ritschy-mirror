@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.18 — optional wait for the output display's vblank
 
 - **Option: wait for the output display's vblank** (`vsync_wait_vblank`, VSync only, default off,
   live; settings + dock). Caps the output at the output display's refresh where VSync alone doesn't —
