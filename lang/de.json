@@ -65,6 +65,8 @@
   "settings.offset_y": "Vertikal-Offset (px)",
   "settings.show_cursor": "Mauszeiger anzeigen",
   "settings.vsync": "VSync",
+  "settings.vsync_wait_vblank": "Auf den VBlank des Ausgabemonitors warten",
+  "settings.vsync_wait_vblank.note": "Nur mit VSync. Begrenzt die Ausgabe auf die Bildwiederholrate des Ausgabemonitors, auch wenn VSync allein das nicht schafft (Treiber erzwingt VSync aus / Enhanced Sync, oder ein schnellerer anderer Monitor gibt den Takt vor) — dann liegt die Ausgabe-FPS über der Bildwiederholrate; das Log meldet es nach 10 s. Aus lassen, wenn die Ausgabe schon passt; mit FreeSync/G-Sync am Ausgabemonitor das Timing prüfen.",
   "settings.keep_awake": "Schlafmodus / Monitor-Abschaltung verhindern (während Spiegelung)",
   "section.frame": "Bildrate",
   "settings.target_fps": "Ziel-FPS (0 = unbegrenzt)",

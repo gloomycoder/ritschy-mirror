@@ -443,11 +443,16 @@ public sealed partial class SettingsForm : Form
     {
         var s = BeginSection("frame", L.T("section.frame"));
         NumericUpDown? fps = null;
+        CheckBox? waitVblank = null;
         var vsync = CheckRow(L.T("settings.vsync"), _cfg.Vsync, v =>
         {
             _cfg.Vsync = v;
             if (fps != null) fps.Enabled = !v; // target_fps only applies with VSync off
+            if (waitVblank != null) waitVblank.Enabled = v;
         });
+        waitVblank = CheckRow(L.T("settings.vsync_wait_vblank"), _cfg.VsyncWaitVblank, v => _cfg.VsyncWaitVblank = v);
+        waitVblank.Enabled = vsync.Checked;
+        Note(L.T("settings.vsync_wait_vblank.note"));
         fps = NumRow(L.T("settings.target_fps"), 0, MirrorConfig.MaxTargetFps, _cfg.TargetFps, 1, 0,
                      v => _cfg.TargetFps = (int)v);
         fps.Enabled = !vsync.Checked;

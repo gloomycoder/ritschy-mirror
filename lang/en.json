@@ -65,6 +65,8 @@
   "settings.offset_y": "Vertical offset (px)",
   "settings.show_cursor": "Show mouse cursor",
   "settings.vsync": "VSync",
+  "settings.vsync_wait_vblank": "Wait for the output display's vblank",
+  "settings.vsync_wait_vblank.note": "With VSync only. Caps the output at the output display's refresh even when VSync alone doesn't hold it (e.g. the graphics driver forces VSync off / Enhanced Sync, or another monitor's faster refresh paces it) — then the output FPS reads above the refresh; the log notes this after 10 s. Leave off if the output already matches the refresh; with FreeSync/G-Sync on the output display, check the pacing.",
   "settings.keep_awake": "Prevent sleep / monitor power-off (while mirroring)",
   "section.frame": "Frame rate",
   "settings.target_fps": "Target FPS (0 = unlimited)",

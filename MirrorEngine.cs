@@ -305,11 +305,12 @@ public sealed class MirrorEngine
     /// Soak log, once per <see cref="SoakLogMs"/>: frame rates, memory and handles over the interval,
     /// then the audio mirror's drift figures — a long run shows slow leaks or clock drift in the log.
     /// </summary>
-    private void LogSoak(long intervalMs, long captured, long presented)
+    private void LogSoak(long intervalMs, long captured, long presented, int displayHz)
     {
         double sec = intervalMs / 1000.0;
         using var proc = Process.GetCurrentProcess();
-        Log($"Soak video {sec:0} s: capture {captured / sec:0.0} fps, output {presented / sec:0.0} fps; " +
+        Log($"Soak video {sec:0} s: capture {captured / sec:0.0} fps, output {presented / sec:0.0} fps " +
+            $"(display {DisplayRefresh.Text(displayHz)}); " +
             $"private {proc.PrivateMemorySize64 >> 20} MB, GC heap {GC.GetTotalMemory(false) >> 20} MB, {proc.HandleCount} handles.");
         Audio.LogStats((int)Math.Round(sec));
     }
@@ -566,7 +567,10 @@ public sealed class MirrorEngine
             _captureFps.Reset();
             _outputFps.Reset();
             Audio.SetDesired(cfg.AudioMirror, dst.Friendly, cfg);
-            if (!_quietSetup) LogFramePacing(cfg);
+            string dstDevice = dst.Output.Description1.DeviceName;
+            if (!_quietSetup) LogFramePacing(cfg, DisplayRefresh.Hz(dstDevice));
+            bool vblankFailed = false;   // WaitForVBlank failed once → VSync alone for this session
+            bool rateChecked = false;
 
             var clock = Stopwatch.StartNew();
             long nextCfgPollMs = ConfigPollMs, nextHdrPollMs = HdrPollMs;
@@ -594,7 +598,8 @@ public sealed class MirrorEngine
                     {
                         lastCfgWrite = t;
                         var nc = MirrorConfig.Load(ConfigPath);
-                        bool pacingChanged = nc.EffectiveTargetFps != cfg.EffectiveTargetFps || nc.Vsync != cfg.Vsync;
+                        bool pacingChanged = nc.EffectiveTargetFps != cfg.EffectiveTargetFps || nc.Vsync != cfg.Vsync
+                                             || nc.VsyncWaitVblank != cfg.VsyncWaitVblank;
                         CopyLiveKeys(nc, cfg);
                         // Sleep-mode lock on/off live, without a render restart.
                         if (cfg.KeepAwake && !keepAwakeOn) { KeepAwakeBegin(); keepAwakeOn = true; }
@@ -602,7 +607,7 @@ public sealed class MirrorEngine
                         // Source-side live parameters (e.g. WGC cursor capture in window mode).
                         capture.ApplyLiveConfig(cfg);
                         Audio.SetDesired(cfg.AudioMirror, dst.Friendly, cfg);
-                        if (pacingChanged) { pacer.Reset(); LogFramePacing(cfg); }
+                        if (pacingChanged) { pacer.Reset(); LogFramePacing(cfg, DisplayRefresh.Hz(dstDevice)); }
                         dirty = true;
                         Log("Config reloaded (live parameters).");
                     }
@@ -627,8 +632,15 @@ public sealed class MirrorEngine
 
                 if (nowMs - lastSoakMs >= SoakLogMs)
                 {
-                    LogSoak(nowMs - lastSoakMs, captured - soakCaptured, presented - soakPresented);
+                    LogSoak(nowMs - lastSoakMs, captured - soakCaptured, presented - soakPresented, DisplayRefresh.Hz(dstDevice));
                     lastSoakMs = nowMs; soakCaptured = captured; soakPresented = presented;
+                }
+
+                // One early check: with VSync on, the output must not outrun the output display.
+                if (!rateChecked && nowMs >= RateCheckMs)
+                {
+                    rateChecked = true;
+                    LogRateCheck(cfg, presented, nowMs, DisplayRefresh.Hz(dstDevice));
                 }
 
                 // Secure desktop (UAC / lock screen): keep window + device, show the last frame and
@@ -722,6 +734,7 @@ public sealed class MirrorEngine
                 renderer.Render(capture, cfg);
                 _unscaled = renderer.Unscaled;
                 if (showOverlay) renderer.DrawOverlay(overlay, cfg.FpsOverlayPosition);
+                if (cfg.Vsync && cfg.VsyncWaitVblank && !vblankFailed) vblankFailed = !WaitForVBlank(dst.Output);
                 renderer.Present(cfg.Vsync);
                 _outputFps.Tick();
                 presented++;
@@ -764,6 +777,7 @@ public sealed class MirrorEngine
         to.Exposure = from.Exposure; to.Saturation = from.Saturation;
         to.Contrast = from.Contrast; to.Gamma = from.Gamma; to.ContentOffsetY = from.ContentOffsetY;
         to.Vsync = from.Vsync;
+        to.VsyncWaitVblank = from.VsyncWaitVblank;
         to.ScaleFilter = from.ScaleFilter;
         to.LayoutMode = from.LayoutMode;
         to.CropX = from.CropX; to.CropY = from.CropY; to.CropW = from.CropW; to.CropH = from.CropH;
@@ -780,13 +794,46 @@ public sealed class MirrorEngine
         to.DxgiSdrEncoding = from.DxgiSdrEncoding;
     }
 
-    private void LogFramePacing(MirrorConfig cfg)
+    private const long RateCheckMs = 10_000;
+
+    /// <summary>Block until the output display's next vblank (vsync_wait_vblank). false = failed →
+    /// the caller falls back to VSync alone for the session (logged once).</summary>
+    private bool WaitForVBlank(IDXGIOutput6 output)
+    {
+        try
+        {
+            output.WaitForVBlank();   // throws on a failed HRESULT
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log("Waiting for the output display's vblank failed (" + ex.Message + ") — VSync alone for this session.");
+        }
+        return false;
+    }
+
+    /// <summary>Output rate over the first seconds vs the output display's refresh — flags a VSync
+    /// that does not limit (driver override, composition following another display).</summary>
+    private void LogRateCheck(MirrorConfig cfg, long presented, long elapsedMs, int displayHz)
+    {
+        double fps = presented * 1000.0 / elapsedMs;
+        string line = $"Output rate after {elapsedMs / 1000} s: {fps:0.0} fps presented, output display {DisplayRefresh.Text(displayHz)}";
+        if (cfg.Vsync && displayHz > 0 && fps > displayHz * 1.05)
+            line += cfg.VsyncWaitVblank
+                ? " — still above the refresh despite the vblank wait"
+                : " — above the refresh: VSync does not limit here (driver VSync override / Enhanced Sync, or composition"
+                  + " paced by another display); vsync_wait_vblank caps it";
+        Log(line + ".");
+    }
+
+    private void LogFramePacing(MirrorConfig cfg, int displayHz)
     {
         int fps = cfg.EffectiveTargetFps;
         if (cfg.Vsync)
-            Log(cfg.TargetFps > 0
-                ? $"Frame pacing: VSync (target_fps {cfg.TargetFps} ignored while VSync is on)."
-                : "Frame pacing: VSync.");
+            Log((cfg.TargetFps > 0
+                ? $"Frame pacing: VSync (target_fps {cfg.TargetFps} ignored while VSync is on)"
+                : "Frame pacing: VSync") + $", output display {DisplayRefresh.Text(displayHz)}"
+                + (cfg.VsyncWaitVblank ? ", waiting for its vblank before each present." : "."));
         else
             Log(fps > 0
                 ? $"Frame pacing: target {fps} fps (VSync off)."

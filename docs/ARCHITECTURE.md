@@ -121,6 +121,19 @@ The render loop (`MirrorEngine.RunSession`) has two pacing modes:
 - Config polling (250 ms) and HDR re-detection (4 s) are wall-clock based, independent of the
   frame rate. The supervisor's "healthy session" test is time-based (5 s) for the same reason.
 - `target_fps` is clamped to 1–1000 and ignored while VSync is on (`MirrorConfig.EffectiveTargetFps`).
+- **`vsync_wait_vblank`** (default off, live, VSync only): before each `Present(1)` the render loop
+  also calls `IDXGIOutput.WaitForVBlank` on the **output display**. `Present(1)` alone normally
+  limits the output to that display's refresh, but not always: a graphics driver can override it
+  (VSync forced off, AMD Enhanced Sync), and a composed swap chain can be paced by another,
+  faster display. The vblank wait does not depend on either. Order: render → wait for vblank N →
+  present (shown at N+1); the queue never fills, so Present doesn't block and a normal setup stays
+  at the full refresh (measured: 60 → 60 in windowed / borderless / exclusive, no halving). A
+  failing wait is logged once and the session continues with VSync alone. With VRR active on the
+  output display the vblank cadence is driver-defined — check pacing there.
+- **Diagnostics:** the frame-pacing line names the output display's refresh
+  (`EnumDisplaySettings`), 10 s into a session `Output rate after 10 s: … fps presented, output
+  display … Hz` is logged (with a hint when VSync is on and the rate is > 5 % above the refresh),
+  and the soak line carries the display's refresh too.
 
 ### FPS readout
 
@@ -298,6 +311,7 @@ the title, at the risk of a similarly named other window. Real configuration err
 | `SettingsForm.Audio.cs` | Audio section of the settings window (device checkboxes + gains); rebuilds the output or input rows in place on device notifications |
 | `LoopbackVolume.cs` | Which part of an output device's volume/mute its loopback still lacks |
 | `Localization.cs` | Language packs (`L`), `LocalizedText` for user-facing errors |
+| `DisplayRefresh.cs` | Current refresh rate of a display (`EnumDisplaySettings`) for the pacing logs |
 | `SdrEncodingProbe.cs` | Detects whether a DXGI FP16 buffer holds an SDR desktop linear or sRGB-encoded (frame vs. GDI at 24 points) |
 | `Win32Window.cs` | Window (`WS_EX_TOOLWINDOW`: never in the taskbar / Alt+Tab) + mouse-lock hook (`WH_MOUSE_LL`, on its own dedicated thread so the cursor stays smooth — the hook is never serviced on the vsync-bound render thread) |
 | `MonitorNames.cs` | Friendly EDID monitor names (CCD `QueryDisplayConfig`) |
@@ -317,7 +331,7 @@ remote controller all write the same file; the render loop reads it live.
 `vsync`, `layout_mode`, `crop_x`, `crop_y`, `crop_w`, `crop_h`, `show_cursor`, `keep_awake`,
 `target_fps`, `fps_overlay`, `fps_overlay_position`, `audio_mirror`, `audio_sources`,
 `audio_render_gain_db`, `audio_capture_gain_db`, `audio_output_id`, `audio_output_name`,
-`audio_follow_volume`, `window_title_similar`, `dxgi_sdr_encoding`, `scale_filter`.
+`audio_follow_volume`, `window_title_similar`, `dxgi_sdr_encoding`, `vsync_wait_vblank`, `scale_filter`.
 
 `tonemap_enabled`, `operator`, `source_peak_nits` and `target_paperwhite` are only in effect for
 an **HDR** source — see [Colour pipeline](#colour-pipeline--hdr-vs-sdr-source).

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Option: wait for the output display's vblank** (`vsync_wait_vblank`, VSync only, default off,
+  live; settings + dock). Caps the output at the output display's refresh where VSync alone doesn't —
+  a driver forcing VSync off / Enhanced Sync, or composition paced by a faster monitor (the output
+  FPS then read above the refresh, e.g. 100+ on a 60 Hz display). Measured here: 60 Hz stays 60 in
+  windowed / borderless / exclusive with the wait on.
+- Log: the frame-pacing and soak lines name the output display's refresh rate; 10 s into a session
+  the presented rate is compared with it and flagged when VSync isn't limiting.
+
 ## v1.4.17 — DXGI SDR colour detection, mirror window off the taskbar
 
 - **DXGI with an SDR desktop: colours detected per graphics driver.** The duplicated FP16 buffer is

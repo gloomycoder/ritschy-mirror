@@ -124,6 +124,7 @@
   <div class="card">
     <h2><span data-i18n="dock.card.frame">Frame rate / audio</span> <small data-i18n="dock.live">(live)</small></h2>
     <label class="chk"><input type="checkbox" id="vsync"><span data-i18n="settings.vsync">VSync</span></label>
+    <label class="chk"><input type="checkbox" id="vsync_wait_vblank"><span data-i18n="settings.vsync_wait_vblank">Wait for the output display's vblank</span></label>
     <div class="row"><label data-i18n="dock.target_fps">Target FPS</label>
       <input type="number" id="target_fps" min="0" max="1000" step="1" style="flex:0 0 86px">
       <span class="hint" style="margin:0" data-i18n="dock.target_fps_hint">0 = unlimited · VSync off only</span></div>
@@ -209,9 +210,9 @@ SLIDERS.forEach(id => {
 });
 
 // ── Live checkboxes + selects ──
-const CHECKS = ["tonemap_enabled","adjust_enabled","show_cursor","vsync","keep_awake","fps_overlay","audio_mirror"];
+const CHECKS = ["tonemap_enabled","adjust_enabled","show_cursor","vsync","vsync_wait_vblank","keep_awake","fps_overlay","audio_mirror"];
 CHECKS.forEach(id => $(id).addEventListener("change", e => patch({ [id]: e.target.checked })));
-$("vsync").addEventListener("change", e => { $("target_fps").disabled = e.target.checked; });
+$("vsync").addEventListener("change", e => { $("target_fps").disabled = e.target.checked; $("vsync_wait_vblank").disabled = !e.target.checked; });
 $("operator").addEventListener("change", e => patch({ operator: e.target.value }));
 $("layout_mode").addEventListener("change", e => patch({ layout_mode: e.target.value }));
 $("fps_overlay_position").addEventListener("change", e => patch({ fps_overlay_position: e.target.value }));

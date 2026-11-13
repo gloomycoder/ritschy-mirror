@@ -41,6 +41,10 @@ public sealed class MirrorConfig
     // Composite the mouse cursor into the output (Desktop Duplication delivers it separately).
     [JsonPropertyName("show_cursor")]      public bool ShowCursor { get; set; } = false;
     [JsonPropertyName("vsync")]            public bool Vsync { get; set; } = true;
+    // With VSync on, also wait for the output display's own vblank before each present — caps the
+    // output at that display's refresh even where Present's sync is overridden (driver "Enhanced
+    // Sync" / VSync forced off) or follows another display's clock (composition). Live.
+    [JsonPropertyName("vsync_wait_vblank")] public bool VsyncWaitVblank { get; set; } = false;
     // Resampling when source crop and output differ in size (1:1 is never filtered):
     // "bilinear" (default, 1 pass) | "area" | "bicubic" (Mitchell) | "catmull_rom" | "lanczos2" | "lanczos3".
     [JsonPropertyName("scale_filter")]     public string ScaleFilter { get; set; } = "bilinear";
@@ -167,7 +171,7 @@ public sealed class MirrorConfig
     public static readonly HashSet<string> LiveKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "tonemap_enabled", "operator", "source_peak_nits", "target_paperwhite",
-        "exposure", "saturation", "contrast", "gamma", "content_offset_y", "vsync",
+        "exposure", "saturation", "contrast", "gamma", "content_offset_y", "vsync", "vsync_wait_vblank",
         "layout_mode", "crop_x", "crop_y", "crop_w", "crop_h", "show_cursor", "keep_awake",
         "target_fps", "fps_overlay", "fps_overlay_position", "audio_mirror", "audio_sources", "scale_filter",
         "audio_render_gain_db", "audio_capture_gain_db", "audio_output_id", "audio_output_name",
